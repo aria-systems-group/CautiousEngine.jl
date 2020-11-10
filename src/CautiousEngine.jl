@@ -1,5 +1,5 @@
 # Module that wraps running an experiment into a nice package
-module CautiousSynth 
+module CautiousEngine 
 
 using Logging
 using LoggingExtras
