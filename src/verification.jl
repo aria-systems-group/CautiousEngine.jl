@@ -2,8 +2,7 @@
 Call the synthesis tool with the given parameters.
 """
 function run_imdp_synthesis(imdp_file, k; ep=1e-6, mode1="maximize", mode2="pessimistic", save_mats=true)
-    exe_path = "/Users/john/Projects/Julia/CautiousSynth/scripts/BMDP-synthesis/synthesis"
-    # exe_string = @sprintf("%s %s %d %f %s", exe_path, mode, k, ep, )
+    exe_path = "synthesis"  # Assumes that this program is on the user's path
     res = read(`$exe_path $mode1 $mode2 -1 0.000001 $imdp_file`, String)
     filter_res = replace(res, "\n"=>" ")
     res_split = split(filter_res)
@@ -13,7 +12,6 @@ function run_imdp_synthesis(imdp_file, k; ep=1e-6, mode1="maximize", mode2="pess
     end
     print(res)
     res_mat = res_to_numbers(res)
-    # save_mats ? save_legacy_mats(res_mat, dst_dir, k) : nothing
     return res_mat
 end
 
