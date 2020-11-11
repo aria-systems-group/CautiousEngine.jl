@@ -15,7 +15,7 @@ using Random
 using Distributions
 using StatsBase
 using Serialization
-using MATLAB
+# using MATLAB
 using MAT
 using Printf
 using IntervalSets
@@ -28,7 +28,7 @@ using LazySets
 using GPBounding
 include("transitions.jl")
 include("error_bounds.jl")
-include("common.jl")
+include("discretization.jl")
 include("data.jl")
 include("verification.jl")
 include("create_dot_graphs.jl")
@@ -81,30 +81,7 @@ export perform_synthesis_from_result_dirs, generate_transition_bounds, generate_
 
 export plot_results_from_file, plot_gp_field_slice
 
-function generate_transition_directory_name(params; true_result_flag=false)
-
-    data_tag = @sprintf("m%d-σ%1.3f-rs%d", params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
-    dst_dir = @sprintf("%s/modes/%s/%s", params.experiment_directory, params.data_params.mode_tag, data_tag)
-
-    # if true_result_flag
-    #     exp_tag = "$verification_mode-$grid_delta" 
-    #     exp_dir = "$experiment_output_dir/$exp_type_tag/$exp_sys_tag/$exp_tag"
-    # else
-    #     bound_type = params_dict["bound_type"]
-    #     m = params_dict["m"]
-    #     noise_sigma = params_dict["noise_sigma"]
-    #     random_seed = params_dict["random_seed"] 
-    #     exp_tag = "$verification_mode-$bound_type-m$m-std$noise_sigma-$grid_delta" 
-    #     if params_dict["epsilon"] > 0
-    #         eps = params_dict["epsilon"] 
-    #         exp_tag = "$exp_tag-eps$eps"
-    #     end
-    #     exp_dir = "$experiment_output_dir/$exp_type_tag/$exp_sys_tag/$exp_tag/$random_seed"
-    # end
-
-    return dst_dir 
-end
-
+# TODO: Fix this function
 function generate_linear_truth(params_dict, A)
 
     # Parse the params dict
@@ -223,14 +200,16 @@ function generate_linear_truth(params_dict, A)
         end
 
         matwrite("$exp_dir/transition_mats.mat", Dict("minPr" => A_min, "maxPr" => A_max))
-        if perform_verification == true
-            @info "Performing BMDP Verification..."
-            pkgpath = dirname(pathof(CautiousSynth))
-            script_path = "$pkgpath/../scripts/BMDP-synthesis"
-            mat"cd($script_path)"
-            mat"addpath(genpath('./'))"
-            mat"generateVerification($exp_dir,$verification_mode)"
-        end
+        # TODO: Add verification here possibly. 
+
+        # if perform_verification == true
+        #     @info "Performing BMDP Verification..."
+        #     pkgpath = dirname(pathof(CautiousSynth))
+        #     script_path = "$pkgpath/../scripts/BMDP-synthesis"
+        #     mat"cd($script_path)"
+        #     mat"addpath(genpath('./'))"
+        #     mat"generateVerification($exp_dir,$verification_mode)"
+        # end
     end
 
     @info "Saving the region data to the experiment directory..."
@@ -357,27 +336,31 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
     # Plot Results
 end
 
-"Generates transition bounds with the given parameters."
-function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_regions_flag=false, rerun_flag=false, reuse_gp_flag=false, reuse_mats_flag=false, logging=Logging.Info) 
+"
+Creates the experiment directory form the parameter structure.
+"
+function create_experiment_directory(params)
+    data_tag = @sprintf("m%d-σ%1.3f-rs%d", params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    exp_dir = @sprintf("%s/modes/%s/%s", params.experiment_directory, params.data_params.mode_tag, data_tag)
+    !isdir(exp_dir) && mkpath(exp_dir)
+    return exp_dir
+end
 
-    # Setup the experiment directory
-    exp_dir = generate_transition_directory_name(params)
-    if !isdir(exp_dir)
-        mkpath(exp_dir)
-    elseif !rerun_flag
-        return exp_dir, nothing
-    end
-
-    # Setup the info logging (not data logging)
+function initialize_log(params; logging=Logging.Info)
+    exp_dir = create_experiment_directory(params)
+    # Setup the logfile with the desired level.
     glogger = SimpleLogger(stdout, logging)
-    io = open("$exp_dir/log.txt", "w+")
-    text_logger = SimpleLogger(io, logging)
+    logfile = open("$exp_dir/log.txt", "w+")
+    text_logger = SimpleLogger(logfile, logging)
     demux_logger = TeeLogger(glogger, text_logger)
     global_logger(demux_logger)
-    @info "Experiment directory: ", exp_dir
+    @info "Experiment directory: " exp_dir
+    return logfile
+end
 
-    # Get the dimensionality of the problem
-    # n_dims = length(keys(params.domain))
+function generate_estimates(params, dyn_fn; 
+                            known_part=nothing, reuse_gp_flag=false)
+    exp_dir = create_experiment_directory(params)
     # Generate a set of GPRs if none are provided.
     gps_dir = @sprintf("%s/gps", params.experiment_directory)
     !isdir(gps_dir) && mkpath(gps_dir)
@@ -390,10 +373,7 @@ function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_re
         end
     else 
         @info "Generating regression..."
-        # Should this be done elsewhere?
-
         # TODO: Decouple the data generation and function building
-        # TODO: 
         if occursin("rkhs", params.data_params.bound_type)
             if !isnothing(known_part)
                 f_sub = (x) -> dyn_fn(x) + known_part(x)
@@ -404,8 +384,9 @@ function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_re
             end
         end
 
-        # Train X GPs on this system
+        # Train GPs on this system
         gp_set = Dict()
+        # TODO: This is not hyperparameterized.
         ls = 0.65
         for (i, out_dim) in enumerate(keys(data_deps)) 
             # Handle data dependency here
@@ -416,26 +397,42 @@ function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_re
             gp = GP(x_train_sub', y_train[:,i], m_prior, k_prior, lnoise)
             gp_set["x$i"] = deepcopy(gp)
         end
-
-        # Save the GPs for further analysis. 
-        @info "Saving GP regressions to experiment directory..."
-        open(gps_filename, "w") do f
-            serialize(f, gp_set)
-        end
-        local_gp_file = "$exp_dir/gaussian_processes_set.bin"
-        open(local_gp_file, "w") do f
-            serialize(f, gp_set)
-        end
     end
 
     gp_info_dict = Dict()
-    domain = params.domain
-    for dim_key in keys(domain) 
+    for dim_key in keys(data_deps) 
         gp_info_dict[dim_key] = create_gp_info(params, gp_set, dim_key) 
     end
 
-    ## Region bounding
+    # TODO: Plotting should be exposed to get accurate timing
+    # create_plots ? plot_gp_fields(exp_dir, dyn_fn) : nothing
+
+    return gp_set, gp_info_dict
+end
+
+function save_gp_info(params, gp_set, gp_info_dict)
+    exp_dir = create_experiment_directory(params)
+    gps_dir = @sprintf("%s/gps", params.experiment_directory)
+    !isdir(gps_dir) && mkpath(gps_dir)
+    gps_filename = @sprintf("%s/%s-m%d-σ%1.3f-rs%d-gps.bin", gps_dir, params.data_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    # Save the GPs for further analysis. 
+    @info "Saving GP regressions to experiment directory..."
+    open(gps_filename, "w") do f
+        serialize(f, gp_set)
+    end
+    local_gp_file = "$exp_dir/gaussian_processes_set.bin"
+    open(local_gp_file, "w") do f
+        serialize(f, gp_set)
+    end
+    # TODO: Save the entire info dict
+end
+
+function generate_region_images(params, gp_info_dict; 
+                                known_part=nothing, reuse_regions_flag=false)
+
+    exp_dir = create_experiment_directory(params)
     basename = "regions"
+    # TODO: Save regions smarter and more consistently
     # for dim_key in keys(params.discretization_step)
     #     basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
     # end
@@ -453,6 +450,7 @@ function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_re
         region_post_dict = Dict()
 
         # Minimum and maximum extents
+        domain = params.domain
         min_ex = [domain[dim_key][1] for dim_key in keys(domain)]
         max_ex = [domain[dim_key][2] for dim_key in keys(domain)]
 
@@ -473,25 +471,43 @@ function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_re
             extent = region_dict[i]
             lb = [extent[dim_key][1] for dim_key in dim_keys]
             ub = [extent[dim_key][2] for dim_key in dim_keys]
-            region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, data_deps; known_part_flag=!isnothing(known_part))
+            region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.data_params.dependency_dims; known_part_flag=!isnothing(known_part))
         end  # End threaded forloop
 
         region_data = Dict()
         region_data[:pairs] = region_pairs
         region_data[:extents] = region_dict
         region_data[:posts] = region_post_dict
-        @info "Saving the region data to the experiment directory..."
-        bson(region_filename, region_data)
     end
 
-    plot_gp_fields(exp_dir, dyn_fn)
+    return region_data
+end
 
-    # TODO: Save time info to log file
+function save_region_data(params, region_data)
+    @info "Saving the region data to the experiment directory..."
+    exp_dir = create_experiment_directory(params)
+    basename = "regions"
+    # for dim_key in keys(params.discretization_step)
+    #     basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
+    # end
+    basename = "$basename.bson"
+    region_filename = "$exp_dir/$basename"
+    bson(region_filename, region_data)
+end
+
+"Generates transition bounds with the given parameters."
+function generate_transition_bounds(params, gp_info_dict, region_data; 
+                                    reuse_mats_flag=false) 
+
+    exp_dir = create_experiment_directory(params)
+    region_pairs = region_data[:pairs]
+    region_dict = region_data[:extents]
+    region_post_dict = region_data[:posts]
+
     tmat_filename = "$exp_dir/transition_mats.mat"
     if !reuse_mats_flag || !isfile(tmat_filename)
         @info "Calculating transition probability bounds between regions..."
-        prob_time = @timed process(region_pairs, region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
-        results_df = prob_time.value
+        results_df = process(region_pairs, region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
 
         # Save the matrices for use in MATLAB verification tool
         save_mats = true 
@@ -517,17 +533,32 @@ function generate_transition_bounds(params, dyn_fn; known_part=nothing, reuse_re
                 end
             end
         end
-
-        matwrite(tmat_filename, Dict("minPr" => minPr_mat, "maxPr" => maxPr_mat)) 
     end
 
-    # Close log file
-    flush(io)
-    close(io)
-    
-    # time_row = [params.data_params.mode_tag, params.data_params.data_num, params.discretization_step, -1., prob_time.time]
-    # TODO: Handle output smarter
-    return exp_dir, nothing 
+    res_mats = Dict("minPr" => minPr_mat, "maxPr" => maxPr_mat)
+    return res_mats 
+end
+
+function save_transition_matrices(params, res_mats)
+    exp_dir = create_experiment_directory(params)
+    tmat_filename = "$exp_dir/transition_mats.mat"
+    matwrite(tmat_filename, res_mats) 
+end
+
+function end_to_end_transition_bounds(params, dyn_fn; known_part=nothing)
+    logfile = initialize_log(params)
+    @info "Generating the regressions..."
+    gp_set, gp_info_dict = generate_estimates(params, dyn_fn; known_part=known_part)
+    save_gp_info(params, gp_set, gp_info_dict)
+    @info "Generating the region info..."
+    region_data = generate_region_images(params, gp_info_dict; known_part=known_part)
+    save_region_data(params, region_data)
+    @info "Generating the transition bounds..."
+    result_mats = generate_transition_bounds(params, gp_info_dict, region_data) 
+    save_transition_matrices(params, result_mats)
+
+    flush(logfile)
+    close(logfile)
 end
 
 ###############################################################################################
@@ -540,15 +571,11 @@ function create_gp_info(params, gp_set, dim_key)
     scale_factor = params.data_params.bound_type == "rkhs-tight" ? params.data_params.noise_sigma/sqrt(1. + 2. / params.data_params.data_num) : 1.
     @info "Scale factor: $scale_factor"
     domain = params.domain
-    # diam_domain = sqrt((domain["x1"][1] - domain["x1"][2])^2 + (domain["x2"][1] - domain["x2"][2])^2)
     diam_domain = 0.
     for dim_key in keys(domain)
         diam_domain += (domain[dim_key][1] - domain[dim_key][2])^2
     end
     diam_domain = sqrt(diam_domain)
-    
-    abs(domain[dim_key][1] - domain[dim_key][2])
-
     σ_inf = sqrt(gp.kernel.σ2*exp(-1/2*(diam_domain)^2/gp.kernel.ℓ2))
 
     # Calculating the RKHS parameter bounds
@@ -561,7 +588,6 @@ function create_gp_info(params, gp_set, dim_key)
 
     K_inv = inv(gp.cK.mat + exp(gp.logNoise.value)^2*I)
     gp_info = GPInfo(gp, γ, RKHS_bound, params.data_params.bound_type, scale_factor, K_inv)
-    # Here, we can calculate the mean and covariance at lots of sampled points in each region
 
     return gp_info
 end

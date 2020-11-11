@@ -20,7 +20,7 @@ function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ,
     # TODO: Pass in real noise value
     noise_dist = TruncatedNormal(0, params.data_params.noise_sigma, -0.01, 0.01)
     ϵ_noise = params.data_params.eta
-    Pr_noise = (calculate_cdf_over_region_1d(noise_dist, [-ϵ_noise, ϵ_noise]))^length(σ_bounds)
+    Pr_noise = (cdf(noise_dist, ϵ_noise) - cdf(noise_dist, -ϵ_noise))^length(σ_bounds)
 
     function margin_extent(extent, ep)
         new_dict = Dict()
