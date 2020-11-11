@@ -11,6 +11,23 @@ mutable struct PIMDP
     trajectory 
 end
 
+" 
+Construct a PIMDP from an MDP by directly specifying unsafe states.
+"
+# TODO: Need multiple ways to do this. This is a hackish way for now.
+function construct_PIMDP_from_IMDP(imdp, unsafe_states)
+
+    # Problem 1: What are the accepting states?
+    # Answer: the accepting states are the unsafe states. Then, we perform verification over the unsafe states and take the complementary
+    # TODO: This is very hackkkkky
+    sink_labels = zeros(1, length(imdp.states))
+    sink_labels[unsafe_states] .= 1
+    pimdp = PIMDP(imdp.states, imdp.actions, imdp.Pbounds, nothing, sink_labels, [],
+                  nothing, nothing, nothing, nothing)
+
+    return pimdp
+end
+
 """
 Construct a product IMDP from a (multimode) IMDP and DFA.
 """
@@ -91,7 +108,7 @@ function write_pimdp_to_file(pimdp, filename)
         sink_states = findall(>(0.), pimdp_sink_labels[:])
 
         for i=1:state_num
-            if !(i∈sink_states)
+            if isnothing(sink_states) || !(i∈sink_states)
                 for action in pimdp.actions
                     row_idx = (i-1)*action_num + action
                     ij = findall(>(0.), maximum.(pimdp.Pbounds[(i-1)*action_num + action, :]))   
@@ -102,7 +119,7 @@ function write_pimdp_to_file(pimdp, filename)
                     psum >= 1 ? nothing : throw(AssertionError("Bad max sum: $psum")) 
                     for j=ij
                         @printf(f, "%d %d %d %f %f", i-1, action-1, j-1, minimum(pimdp.Pbounds[row_idx, j]), maximum(pimdp.Pbounds[row_idx, j]))
-                        if (i < state_num || j < ij[end] || a < action_num)
+                        if (i < state_num || j < ij[end] || action < action_num)
                             @printf(f, "\n")
                         end
                     end

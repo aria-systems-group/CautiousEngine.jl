@@ -440,10 +440,7 @@ function generate_region_images(params, gp_info_dict;
     region_filename = "$exp_dir/$basename"
 
     if reuse_regions_flag && isfile(region_filename)
-        res = BSON.load(region_filename)
-        region_dict = res[:extents]
-        region_pairs = res[:pairs]
-        region_post_dict = res[:posts]
+        region_data = BSON.load(region_filename)
     else
         region_dict, region_pairs = create_region_data(params.domain, params.discretization_step)
         num_regions = length(keys(region_dict))
@@ -545,7 +542,23 @@ function save_transition_matrices(params, res_mats)
     matwrite(tmat_filename, res_mats) 
 end
 
-function end_to_end_transition_bounds(params, dyn_fn; known_part=nothing)
+function perform_imdp_verification(params, res_mats)
+    exp_dir = create_experiment_directory(params)
+    imdp = create_single_mode_imdp(res_mats["minPr"], res_mats["maxPr"])
+    # TODO: Need to generalize this!!!!!!
+    unsafe_states = [length(imdp.states)]
+    # All of this should be inside "verify IMDP"
+    pimdp = construct_PIMDP_from_IMDP(imdp, unsafe_states)
+    filename = "$exp_dir/test-pimdp.txt"
+    write_pimdp_to_file(pimdp, filename)
+    result_mat = run_unbounded_imdp_verification(filename)
+    safety_result_mat = result_mat
+    safety_result_mat[:, 3] = 1 .- result_mat[:, 4]
+    safety_result_mat[:, 4] = 1 .- result_mat[:, 3]
+    return safety_result_mat
+end
+
+function end_to_end_transition_bounds(params, dyn_fn; known_part=nothing, single_mode_verification=false)
     logfile = initialize_log(params)
     @info "Generating the regressions..."
     gp_set, gp_info_dict = generate_estimates(params, dyn_fn; known_part=known_part)
@@ -557,6 +570,11 @@ function end_to_end_transition_bounds(params, dyn_fn; known_part=nothing)
     result_mats = generate_transition_bounds(params, gp_info_dict, region_data) 
     save_transition_matrices(params, result_mats)
 
+    if single_mode_verification
+        @info "Performing safety verification on single mode..."
+        perform_imdp_verification(params, result_mats)
+    end
+    
     flush(logfile)
     close(logfile)
 end
