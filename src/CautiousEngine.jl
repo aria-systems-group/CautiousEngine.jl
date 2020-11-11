@@ -12,7 +12,7 @@ using LinearAlgebra
 using Base.Threads
 using GaussianProcesses
 using Random
-using Distributions
+# using Distributions
 using StatsBase
 using Serialization
 # using MATLAB
@@ -40,18 +40,25 @@ include("visualize.jl")
 include("intersection.jl")
 include("run_simulation.jl")
 
-mutable struct DataParameters 
+struct SystemParameters
     mode_tag::String
+    unknown_dynamics_fcn
+    known_dynamics_fcn
+    measurement_noise_dist
+    process_noise_dist
+    lipschitz_bound::Float64
+    dependency_dims::Dict
+    n_dims_in::Int
+    n_dims_out::Int
+end
+
+mutable struct DataParameters 
     data_num::Int
     bound_type::String
-    lipschitz_bound::Float64 # implicitly assumes same bound for all dims
     noise_sigma::Float64
     epsilon::Float64
     eta::Float64
     safety_dims
-    dependency_dims::Dict
-    n_dims_in::Int
-    n_dims_out::Int
 end
 
 # TODO: Switch to params structure
@@ -63,6 +70,7 @@ mutable struct ExperimentParameters
     discretization_step::Dict
     verification_mode::String
     random_seed::Int
+    system_params::SystemParameters
     data_params::DataParameters
 end
 
@@ -75,7 +83,7 @@ struct GPInfo
     Kinv
 end
 
-export DataParameters, ExperimentParameters
+export SystemParameters, DataParameters, ExperimentParameters
 
 export perform_synthesis_from_result_dirs, generate_transition_bounds, generate_linear_truth, verify_experiment, generate_result_dir_name
 
@@ -341,7 +349,7 @@ Creates the experiment directory form the parameter structure.
 "
 function create_experiment_directory(params)
     data_tag = @sprintf("m%d-σ%1.3f-rs%d", params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
-    exp_dir = @sprintf("%s/modes/%s/%s", params.experiment_directory, params.data_params.mode_tag, data_tag)
+    exp_dir = @sprintf("%s/modes/%s/%s", params.experiment_directory, params.system_params.mode_tag, data_tag)
     !isdir(exp_dir) && mkpath(exp_dir)
     return exp_dir
 end
@@ -358,32 +366,19 @@ function initialize_log(params; logging=Logging.Info)
     return logfile
 end
 
-function generate_estimates(params, dyn_fn; 
-                            known_part=nothing, reuse_gp_flag=false)
+function generate_estimates(params, x_train, y_train; reuse_gp_flag=false)
     exp_dir = create_experiment_directory(params)
     # Generate a set of GPRs if none are provided.
     gps_dir = @sprintf("%s/gps", params.experiment_directory)
     !isdir(gps_dir) && mkpath(gps_dir)
-    gps_filename = @sprintf("%s/%s-m%d-σ%1.3f-rs%d-gps.bin", gps_dir, params.data_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
-    data_deps = params.data_params.dependency_dims
+    gps_filename = @sprintf("%s/%s-m%d-σ%1.3f-rs%d-gps.bin", gps_dir, params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    data_deps = params.system_params.dependency_dims
     if isfile(gps_filename) && reuse_gp_flag
         @info "Resuing gp: " gps_filename
         open(gps_filename) do f
             gp_set = deserialize(f)
         end
     else 
-        @info "Generating regression..."
-        # TODO: Decouple the data generation and function building
-        if occursin("rkhs", params.data_params.bound_type)
-            if !isnothing(known_part)
-                f_sub = (x) -> dyn_fn(x) + known_part(x)
-                x_train, y_train_p = generate_data_bounded_gaussian(params, f_sub) 
-                y_train = y_train_p - mapslices(known_part, x_train, dims=2)
-            else
-                x_train, y_train = generate_data_bounded_gaussian(params, dyn_fn) 
-            end
-        end
-
         # Train GPs on this system
         gp_set = Dict()
         # TODO: This is not hyperparameterized.
@@ -414,7 +409,7 @@ function save_gp_info(params, gp_set, gp_info_dict)
     exp_dir = create_experiment_directory(params)
     gps_dir = @sprintf("%s/gps", params.experiment_directory)
     !isdir(gps_dir) && mkpath(gps_dir)
-    gps_filename = @sprintf("%s/%s-m%d-σ%1.3f-rs%d-gps.bin", gps_dir, params.data_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    gps_filename = @sprintf("%s/%s-m%d-σ%1.3f-rs%d-gps.bin", gps_dir, params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
     # Save the GPs for further analysis. 
     @info "Saving GP regressions to experiment directory..."
     open(gps_filename, "w") do f
@@ -427,8 +422,7 @@ function save_gp_info(params, gp_set, gp_info_dict)
     # TODO: Save the entire info dict
 end
 
-function generate_region_images(params, gp_info_dict; 
-                                known_part=nothing, reuse_regions_flag=false)
+function generate_region_images(params, gp_info_dict; reuse_regions_flag=false)
 
     exp_dir = create_experiment_directory(params)
     basename = "regions"
@@ -468,7 +462,7 @@ function generate_region_images(params, gp_info_dict;
             extent = region_dict[i]
             lb = [extent[dim_key][1] for dim_key in dim_keys]
             ub = [extent[dim_key][2] for dim_key in dim_keys]
-            region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.data_params.dependency_dims; known_part_flag=!isnothing(known_part))
+            region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))
         end  # End threaded forloop
 
         region_data = Dict()
@@ -558,13 +552,15 @@ function perform_imdp_verification(params, res_mats)
     return safety_result_mat
 end
 
-function end_to_end_transition_bounds(params, dyn_fn; known_part=nothing, single_mode_verification=false)
+function end_to_end_transition_bounds(params; single_mode_verification=false)
     logfile = initialize_log(params)
+    @info "Generating the training data..."
+    x_train, y_train = generate_training_data(params)
     @info "Generating the regressions..."
-    gp_set, gp_info_dict = generate_estimates(params, dyn_fn; known_part=known_part)
+    gp_set, gp_info_dict = generate_estimates(params, x_train, y_train)
     save_gp_info(params, gp_set, gp_info_dict)
     @info "Generating the region info..."
-    region_data = generate_region_images(params, gp_info_dict; known_part=known_part)
+    region_data = generate_region_images(params, gp_info_dict, reuse_regions_flag=true)
     save_region_data(params, region_data)
     @info "Generating the transition bounds..."
     result_mats = generate_transition_bounds(params, gp_info_dict, region_data) 
@@ -597,7 +593,7 @@ function create_gp_info(params, gp_set, dim_key)
     σ_inf = sqrt(gp.kernel.σ2*exp(-1/2*(diam_domain)^2/gp.kernel.ℓ2))
 
     # Calculating the RKHS parameter bounds
-    RKHS_bound = abs(domain[dim_key][2] + params.data_params.lipschitz_bound*diam_domain)/ σ_inf
+    RKHS_bound = abs(domain[dim_key][2] + params.system_params.lipschitz_bound*diam_domain)/ σ_inf
     @info "RKHS Norm Bound in $dim_key: ", RKHS_bound
 
     B = 1 + (params.data_params.noise_sigma)^(-2)

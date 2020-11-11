@@ -5,10 +5,6 @@ function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ,
 
     # Get the subset of the safe region that matters.
     safe_keys = params.data_params.safety_dims
-    # if length(safe_keys) == 0 && region_pair[2] == -11
-    #     # Everything is safe
-    #     return [region_pair[1], region_pair[2],  1.0, 1.0, [-1., -1.], [0., 0.]] 
-    # end
     S = Dict()
     Q_post_extent = Dict()
     for dim_key in safe_keys
@@ -18,9 +14,14 @@ function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ,
 
     # For now, do a naiive shrink - first noise, then the next
     # TODO: Pass in real noise value
-    noise_dist = TruncatedNormal(0, params.data_params.noise_sigma, -0.01, 0.01)
-    ϵ_noise = params.data_params.eta
-    Pr_noise = (cdf(noise_dist, ϵ_noise) - cdf(noise_dist, -ϵ_noise))^length(σ_bounds)
+    
+    if !isnothing(params.system_params.process_noise_dist)
+        ϵ_noise = params.data_params.eta
+        Pr_noise = (cdf(params.system_params.process_noise_dist, ϵ_noise) - cdf(params.system_params.process_noise_dist, -ϵ_noise))^length(σ_bounds)
+    else
+        ϵ_noise = 0.
+        Pr_noise = 1.
+    end
 
     function margin_extent(extent, ep)
         new_dict = Dict()
