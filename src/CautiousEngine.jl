@@ -12,7 +12,7 @@ using LinearAlgebra
 using Base.Threads
 using GaussianProcesses
 using Random
-# using Distributions
+using Distributions
 using StatsBase
 using Serialization
 # using MATLAB
@@ -552,27 +552,65 @@ function perform_imdp_verification(params, res_mats)
     return safety_result_mat
 end
 
-function end_to_end_transition_bounds(params; single_mode_verification=false)
+function save_time_info(params, time_info)
+    exp_dir = create_experiment_directory(params)
+    time_filename = "$exp_dir/time_info.bson"
+    bson(time_filename, time_info)
+end
+
+function end_to_end_transition_bounds(params; single_mode_verification=false) 
     logfile = initialize_log(params)
     @info "Generating the training data..."
-    x_train, y_train = generate_training_data(params)
+    total_runtime = 0.
+    timing_info = Dict()
+    gen_time = @elapsed begin
+        x_train, y_train = generate_training_data(params)
+    end
+    total_runtime += gen_time
+    timing_info["data_generation_time_s"] = gen_time
+    @info "Data generation time: " gen_time
     @info "Generating the regressions..."
-    gp_set, gp_info_dict = generate_estimates(params, x_train, y_train)
+    gp_time = @elapsed begin
+        gp_set, gp_info_dict = generate_estimates(params, x_train, y_train)
+    end
+    total_runtime += gp_time
+    timing_info["gp_regression_time_s"] = gp_time 
+    @info "GP generation time: " gp_time
     save_gp_info(params, gp_set, gp_info_dict)
     @info "Generating the region info..."
-    region_data = generate_region_images(params, gp_info_dict, reuse_regions_flag=true)
+    region_time = @elapsed begin
+        region_data = generate_region_images(params, gp_info_dict)
+    end
+    total_runtime += region_time
+    timing_info["region_bound_time_s"] = region_time 
+    @info "Region generation time: " region_time
     save_region_data(params, region_data)
     @info "Generating the transition bounds..."
-    result_mats = generate_transition_bounds(params, gp_info_dict, region_data) 
+    bound_time = @elapsed begin
+        result_mats = generate_transition_bounds(params, gp_info_dict, region_data)
+    end
+    total_runtime += bound_time
+    timing_info["transition_bound_time_s"] = bound_time 
+    @info "Bound generation time: " bound_time
     save_transition_matrices(params, result_mats)
 
     if single_mode_verification
         @info "Performing safety verification on single mode..."
-        perform_imdp_verification(params, result_mats)
+        verification_time = @elapsed begin 
+            perform_imdp_verification(params, result_mats)
+        end
+        timing_info["single_verification_time_s"] = verification_time  
+        @info "Verification time: " verification_time
     end
+
+    @info "Total runtime: " total_runtime
+    timing_info["total_runtime_s"] = total_runtime
+    save_time_info(params, timing_info)
     
     flush(logfile)
     close(logfile)
+
+    return timing_info
 end
 
 ###############################################################################################
