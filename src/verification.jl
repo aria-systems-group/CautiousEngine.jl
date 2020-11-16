@@ -3,7 +3,7 @@ Call the synthesis tool with the given parameters.
 """
 function run_imdp_synthesis(imdp_file, k; ep=1e-6, mode1="maximize", mode2="pessimistic", save_mats=true)
     exe_path = "synthesis"  # Assumes that this program is on the user's path
-    res = read(`$exe_path $mode1 $mode2 -1 0.000001 $imdp_file`, String)
+    res = read(`$exe_path $mode1 $mode2 $k 0.000001 $imdp_file`, String)
     filter_res = replace(res, "\n"=>" ")
     res_split = split(filter_res)
     dst_dir = dirname(imdp_file)
@@ -21,6 +21,24 @@ Call the synthesis tool with unbounded time horizon.
 function run_unbounded_imdp_synthesis(imdp_file)
     res_mat = run_imdp_synthesis(imdp_file, -1)
     return res_mat
+end
+
+"""
+Call the synthesis tool to perform verification on a bounded horizon.
+"""
+function run_bounded_imdp_verification(imdp_file, k)
+    res_mat = run_imdp_synthesis(imdp_file, k, mode1="minimize", mode2="pessimistic")
+    return res_mat
+end
+
+"""
+Call the MATLAB verification tool.
+"""
+function run_MATLAB_verification(script_path, exp_dir, k, verification_mode)
+    @info "Performing BMDP Verification..."
+    mat"cd($script_path)"
+    mat"addpath(genpath('./'))"
+    mat"generateVerification($exp_dir,$verification_mode,$k)"
 end
 
 """

@@ -15,7 +15,7 @@ using Random
 using Distributions
 using StatsBase
 using Serialization
-# using MATLAB
+using MATLAB
 using MAT
 using Printf
 using IntervalSets
@@ -71,7 +71,7 @@ mutable struct ExperimentParameters
     verification_mode::String
     random_seed::Int
     system_params::SystemParameters
-    data_params::DataParameters
+    data_params
 end
 
 struct GPInfo
@@ -90,95 +90,126 @@ export perform_synthesis_from_result_dirs, generate_transition_bounds, generate_
 export plot_results_from_file, plot_gp_field_slice
 
 # TODO: Fix this function
-function generate_linear_truth(params_dict, A)
+function generate_linear_truth(params, system_matrix; single_mode_verification=false)
+    logfile = initialize_log(params)
+    timing_info = Dict()
+    total_runtime = 0.
+    # TODO: Move this
+    @info "Determining the post-images of the regions under the linear map."
+    region_time = @elapsed begin 
+        region_dict, region_pairs, extents_dict = create_region_data_new(params.domain, params.discretization_step)
 
-    # Parse the params dict
-    
-    # Unpack all of the parameters
-    exp_type_tag = params_dict["exp_type_tag"]
-    exp_sys_tag = params_dict["exp_sys_tag"]
+        # Here, we can calculate the mean and covariance at lots of sampled points in each region
+        region_post_dict = Dict()
 
-    # TODO: Consolidate the domain name and actual domain
-    X = params_dict["X"]
-    domain = params_dict["domain"]
-    grid_delta = params_dict["grid_delta"]
-    save_mats = params_dict["save_mats"]
-    perform_verification = params_dict["verify_flag"]
-    verification_mode = params_dict["verification_mode"]
-    experiment_output_dir = params_dict["experiment_dir"]
+        L = length(keys(region_dict))
+        for i=1:length(keys(region_dict)) 
+            # TODO: Fix the indeces to not use -11
+            if i == L 
+                region = region_dict[-11]
+            else
+                region = region_dict[i]
+            end
+            
+            # Lazy representation saves time
+            # TODO: Add the process noise term here for verification
+            region_post = LinearMap(0.9999*system_matrix, region) 
 
-    # Setup the experiment directory
-    exp_dir = generate_result_dir_name(params_dict, true_result_flag=true)
-    if !isdir(exp_dir)
-        mkpath(exp_dir)
-    else
-        return nothing
+            if i == L 
+                region_post_dict[-11] = region_post 
+            else
+                region_post_dict[i] = region_post 
+            end
+        end 
+
+        region_data = Dict()
+        region_data[:pairs] = region_pairs
+        region_data[:extents] = extents_dict 
+        region_data[:posts] = region_post_dict 
+    end
+    timing_info["region_bound_time_s"] = region_time 
+    total_runtime += region_time
+    @info "Region generation time: " region_time
+    save_region_data(params, region_data)
+    @info "Generating the transition bounds..."
+    bound_time = @elapsed begin
+        @info "Calculating transition probability bounds between regions..."
+        results_df = DataFrame(Set1 = Int[], Set2 = Int[], MinPr = Float64[], MaxPr = Float64[], MinPrPoint = Array[], MaxPrPoint = Array[])
+        for region_pair in region_pairs
+            r1 = region_dict[region_pair[1]]
+            r2 = region_dict[region_pair[2]]
+            r1_post = region_post_dict[region_pair[1]]
+        
+            # Check lazy intersection
+            cap = Intersection(r1_post, r2)
+            if isempty(cap)
+                prange = [0., 0.]
+            else
+                if isequivalent(r1_post, cap)
+                    prange = [1., 1.]
+                else
+                    prange = [0., 1.]
+                end
+            end   
+
+            df_row = [region_pair[1], region_pair[2], prange[1], prange[2], [-1.], [-1.]]
+            push!(results_df, df_row)
+        end
+        num_states = length(keys(region_dict))
+        minPr_mat = zeros((num_states, num_states))
+        maxPr_mat = zeros((num_states, num_states))
+        for i = 1:1:num_states
+            sub_row = results_df[results_df.Set1 .== i, :]
+            if i == num_states
+                minPr_mat[i, i] = 1.
+                maxPr_mat[i, i] = 1.
+            else
+                for j = 1:1:num_states
+                    if j == num_states
+                        subsub_row = sub_row[sub_row.Set2 .== -11, :]
+                        minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
+                        maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
+                    else
+                        subsub_row = sub_row[sub_row.Set2 .== j, :]
+                        minPr_mat[i, j] = subsub_row.MinPr[1]
+                        maxPr_mat[i, j] = subsub_row.MaxPr[1]
+                    end
+                end
+            end
+        end
+
+        result_mats = Dict("minPr" => minPr_mat, "maxPr" => maxPr_mat)
+    end
+    total_runtime += bound_time
+    timing_info["transition_bound_time_s"] = bound_time 
+    @info "Bound generation time: " bound_time
+    save_transition_matrices(params, result_mats)
+
+    if single_mode_verification
+        @info "Performing safety verification on single mode..."
+        verification_time = @elapsed begin 
+            # script_path = "/Users/john/Projects/Julia/BMDPVerification"
+            # run_MATLAB_verification(script_path, create_experiment_directory(params), -1, params.verification_mode)
+            perform_imdp_verification(params, result_mats, 1)
+        end
+        timing_info["single_verification_time_s"] = verification_time  
+        @info "Verification time: " verification_time
     end
 
-    # Setup the info logging (not data logging)
-    glogger = SimpleLogger(stdout, Logging.Info)
-    io = open("$exp_dir/log.txt", "w+")
-    text_logger = SimpleLogger(io, Logging.Info)
-    demux_logger = TeeLogger(glogger, text_logger)
-    global_logger(demux_logger)
-    @info "Experiment directory: ", exp_dir
+    @info "Total runtime: " total_runtime
+    timing_info["total_runtime_s"] = total_runtime
+    save_time_info(params, timing_info)
     
+    flush(logfile)
+    close(logfile)
+
+    return timing_info
+
     # Holder of the metadata rows
-    metadata_rows = []
-    region_dict, region_pairs, extents_dict = create_region_data_new(X, grid_delta)
-    @info "Determining the post-images of the regions under the linear map."
-
-    # Here, we can calculate the mean and covariance at lots of sampled points in each region
-    region_post_dict = Dict()
-
-    L = length(keys(region_dict))
-    for i=1:length(keys(region_dict)) 
-        # TODO: Fix the indeces to not use -11
-        if i == L 
-            region = region_dict[-11]
-        else
-            region = region_dict[i]
-        end
-        
-        # Lazy representation saves time
-        # TODO: Add the noise term here for verification
-        region_post = LinearMap(0.9999*A, region) 
-
-        if i == L 
-            region_post_dict[-11] = region_post 
-        else
-            region_post_dict[i] = region_post 
-        end
-    end 
-
-    region_data = Dict()
-    region_data[:pairs] = region_pairs
-    region_data[:extents] = extents_dict 
-    region_data[:posts] = region_post_dict 
+    
 
     # TODO: Save time info to log file
-    @info "Calculating transition probability bounds between regions..."
-    results_df = DataFrame(Set1 = Int[], Set2 = Int[], MinPr = Float64[], MaxPr = Float64[], MinPrPoint = Array[], MaxPrPoint = Array[])
-    for region_pair in region_pairs
-        r1 = region_dict[region_pair[1]]
-        r2 = region_dict[region_pair[2]]
-        r1_post = region_post_dict[region_pair[1]]
-       
-        # Check lazy intersection
-        cap = Intersection(r1_post, r2)
-        if isempty(cap)
-            prange = [0., 0.]
-        else
-            if isequivalent(r1_post, cap)
-                prange = [1., 1.]
-            else
-                prange = [0., 1.]
-            end
-        end   
-
-        df_row = [region_pair[1], region_pair[2], prange[1], prange[2], [-1.], [-1.]]
-        push!(results_df, df_row)
-    end
+    
 
     # Save the matrices for use in MATLAB verification tool
     save_mats = false
@@ -208,54 +239,9 @@ function generate_linear_truth(params_dict, A)
         end
 
         matwrite("$exp_dir/transition_mats.mat", Dict("minPr" => A_min, "maxPr" => A_max))
-        # TODO: Add verification here possibly. 
 
-        # if perform_verification == true
-        #     @info "Performing BMDP Verification..."
-        #     pkgpath = dirname(pathof(CautiousSynth))
-        #     script_path = "$pkgpath/../scripts/BMDP-synthesis"
-        #     mat"cd($script_path)"
-        #     mat"addpath(genpath('./'))"
-        #     mat"generateVerification($exp_dir,$verification_mode)"
-        # end
     end
-
-    @info "Saving the region data to the experiment directory..."
-    bson("$exp_dir/regions.bson", region_data)
-
-    @info "Saving the parameters dictionary..."
-    params_file = "$exp_dir/params.bson"
-    bson(params_file, params_dict)
-    
-    # Create a row for the metadata results
-    @info "Generating metadata..."
-    min_histogram = fit(Histogram, results_df[!, :MinPr], 0:0.1:1.1)
-    max_histogram = fit(Histogram, results_df[!, :MaxPr], 0:0.1:1.1)
-    @info "Minimum lower bound histogram: " min_histogram.weights
-    @info "Maximum upper bound histogram: " max_histogram.weights
-
-    # Get the maximum and minimum safe transition probabilities
-    minPr_safe = []
-    maxPr_safe = []
-    set2_rows = results_df.Set2
-    min_rows = results_df.MinPr
-    max_rows = results_df.MaxPr
-    for (extent_id, minpr, maxpr) in zip(set2_rows, min_rows, max_rows)
-        if extent_id == -11
-            push!(minPr_safe, minpr)
-            push!(maxPr_safe, maxpr) 
-        end
-    end 
-    s_max_histogram = fit(Histogram, maxPr_safe, 0:0.1:1.1)
-    s_min_histogram = fit(Histogram, minPr_safe, 0:0.1:1.1)
-    @info "Safety minimum lower bound histogram: " s_min_histogram.weights
-    @info "Safety maximum upper bound histogram: " s_max_histogram.weights
-
-    flush(io)
-    close(io)
-    
-    # TODO: Handle output smarter
-    return exp_dir 
+  
 end
 
 # TODO: This will eventually be the end-to-end function
@@ -348,7 +334,11 @@ end
 Creates the experiment directory form the parameter structure.
 "
 function create_experiment_directory(params)
-    data_tag = @sprintf("m%d-σ%1.3f-rs%d", params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    if !isnothing(params.data_params)
+        data_tag = @sprintf("m%d-σ%1.3f-rs%d", params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    else
+        data_tag = "known-system"
+    end
     exp_dir = @sprintf("%s/modes/%s/%s", params.experiment_directory, params.system_params.mode_tag, data_tag)
     !isdir(exp_dir) && mkpath(exp_dir)
     return exp_dir
@@ -501,7 +491,6 @@ function generate_transition_bounds(params, gp_info_dict, region_data;
         results_df = process(region_pairs, region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
 
         # Save the matrices for use in MATLAB verification tool
-        save_mats = true 
         num_states = length(keys(region_dict))
         minPr_mat = zeros((num_states, num_states))
         maxPr_mat = zeros((num_states, num_states))
@@ -536,19 +525,25 @@ function save_transition_matrices(params, res_mats)
     matwrite(tmat_filename, res_mats) 
 end
 
-function perform_imdp_verification(params, res_mats)
+function perform_imdp_verification(params, res_mats, horizon; simply_safe=true)
     exp_dir = create_experiment_directory(params)
     imdp = create_single_mode_imdp(res_mats["minPr"], res_mats["maxPr"])
     # TODO: Need to generalize this!!!!!!
-    unsafe_states = [length(imdp.states)]
-    # All of this should be inside "verify IMDP"
-    pimdp = construct_PIMDP_from_IMDP(imdp, unsafe_states)
-    filename = "$exp_dir/test-pimdp.txt"
-    write_pimdp_to_file(pimdp, filename)
-    result_mat = run_unbounded_imdp_verification(filename)
-    safety_result_mat = result_mat
-    safety_result_mat[:, 3] = 1 .- result_mat[:, 4]
-    safety_result_mat[:, 4] = 1 .- result_mat[:, 3]
+    if simply_safe
+        unsafe_states = [length(imdp.states)]
+        # All of this should be inside "verify IMDP"
+        pimdp = construct_PIMDP_from_IMDP(imdp, unsafe_states)
+        filename = "$exp_dir/test-pimdp.txt"
+        write_pimdp_to_file(pimdp, filename)
+        result_mat = run_bounded_imdp_verification(filename, horizon)
+        safety_result_mat = zeros(size(result_mat))
+        safety_result_mat[:, 1] = result_mat[:, 1]
+        safety_result_mat[:, 2] = result_mat[:, 2]
+        safety_result_mat[:, 3] = 1 .- result_mat[:, 4]
+        safety_result_mat[:, 4] = 1 .- result_mat[:, 3]
+    end
+
+    save_legacy_mats(safety_result_mat, exp_dir, horizon)
     return safety_result_mat
 end
 
@@ -579,7 +574,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false)
     save_gp_info(params, gp_set, gp_info_dict)
     @info "Generating the region info..."
     region_time = @elapsed begin
-        region_data = generate_region_images(params, gp_info_dict)
+        region_data = generate_region_images(params, gp_info_dict, reuse_regions_flag=true)
     end
     total_runtime += region_time
     timing_info["region_bound_time_s"] = region_time 
@@ -597,7 +592,9 @@ function end_to_end_transition_bounds(params; single_mode_verification=false)
     if single_mode_verification
         @info "Performing safety verification on single mode..."
         verification_time = @elapsed begin 
-            perform_imdp_verification(params, result_mats)
+            # script_path = "/Users/john/Projects/Julia/BMDPVerification"
+            # run_MATLAB_verification(script_path, create_experiment_directory(params), -1, params.verification_mode)
+            perform_imdp_verification(params, result_mats, 1)
         end
         timing_info["single_verification_time_s"] = verification_time  
         @info "Verification time: " verification_time
@@ -714,7 +711,7 @@ function create_region_data(space, grid_sizes)
 end
 
 function create_region_data_new(space, grid_size)
-    region_dict, extent_dict = discretize_set_new(space, grid_size)
+    region_dict, extent_dict = discretize_set_lazy(space, grid_size)
     x = space["x1"]
     y = space["x2"]
     # TODO: How to deal with this negative index in a better way

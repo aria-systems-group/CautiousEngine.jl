@@ -35,18 +35,19 @@ end
 - `epsilon::Float64` - Size of the discretization
 "
 function discretize_set_lazy(set, epsilon)
+    # TODO: Generalize this for n-dimensions
     x = set["x1"]
     y = set["x2"]
 
-    x_epsilons = x[1]:epsilon:x[2]
-    y_epsilons = y[1]:epsilon:y[2]
+    x_epsilons = x[1]:epsilon["x1"]:x[2]
+    y_epsilons = y[1]:epsilon["x2"]:y[2]
 
     discrete_sets = Dict()
     discrete_extents = Dict()
     idx = 1
     for i = 1:length(x_epsilons)-1
         for j = 1:length(y_epsilons)-1
-            new_extent = Extent("x1" => [x_epsilons[i], x_epsilons[i+1]], "x2" => [y_epsilons[j], y_epsilons[j+1]])
+            new_extent = Dict("x1" => [x_epsilons[i], x_epsilons[i+1]], "x2" => [y_epsilons[j], y_epsilons[j+1]])
             new_polygon = VPolygon([[x_epsilons[i], y_epsilons[j]], [x_epsilons[i], y_epsilons[j+1]], 
                                     [x_epsilons[i+1], y_epsilons[j+1]], [x_epsilons[i+1], y_epsilons[j]]])
             discrete_sets[idx] = new_polygon 
