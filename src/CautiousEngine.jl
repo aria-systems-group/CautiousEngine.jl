@@ -416,10 +416,9 @@ function generate_region_images(params, gp_info_dict; reuse_regions_flag=false)
 
     exp_dir = create_experiment_directory(params)
     basename = "regions"
-    # TODO: Save regions smarter and more consistently
-    # for dim_key in keys(params.discretization_step)
-    #     basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
-    # end
+    for dim_key in keys(params.discretization_step)
+        basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
+    end
     basename = "$basename.bson"
     region_filename = "$exp_dir/$basename"
 
@@ -468,11 +467,12 @@ function save_region_data(params, region_data)
     @info "Saving the region data to the experiment directory..."
     exp_dir = create_experiment_directory(params)
     basename = "regions"
-    # for dim_key in keys(params.discretization_step)
-    #     basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
-    # end
+    for dim_key in keys(params.discretization_step)
+        basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
+    end
     basename = "$basename.bson"
     region_filename = "$exp_dir/$basename"
+
     bson(region_filename, region_data)
 end
 
@@ -553,7 +553,7 @@ function save_time_info(params, time_info)
     bson(time_filename, time_info)
 end
 
-function end_to_end_transition_bounds(params; single_mode_verification=false) 
+function end_to_end_transition_bounds(params; single_mode_verification=false, reuse_regions_flag=false) 
     logfile = initialize_log(params)
     @info "Generating the training data..."
     total_runtime = 0.
@@ -574,7 +574,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false)
     save_gp_info(params, gp_set, gp_info_dict)
     @info "Generating the region info..."
     region_time = @elapsed begin
-        region_data = generate_region_images(params, gp_info_dict, reuse_regions_flag=true)
+        region_data = generate_region_images(params, gp_info_dict, reuse_regions_flag=reuse_regions_flag)
     end
     total_runtime += region_time
     timing_info["region_bound_time_s"] = region_time 
@@ -588,13 +588,14 @@ function end_to_end_transition_bounds(params; single_mode_verification=false)
     timing_info["transition_bound_time_s"] = bound_time 
     @info "Bound generation time: " bound_time
     save_transition_matrices(params, result_mats)
-
+ 
+    safety_result_mat = nothing
     if single_mode_verification
         @info "Performing safety verification on single mode..."
         verification_time = @elapsed begin 
             # script_path = "/Users/john/Projects/Julia/BMDPVerification"
             # run_MATLAB_verification(script_path, create_experiment_directory(params), -1, params.verification_mode)
-            perform_imdp_verification(params, result_mats, 1)
+            safety_result_mat = perform_imdp_verification(params, result_mats, 1)
         end
         timing_info["single_verification_time_s"] = verification_time  
         @info "Verification time: " verification_time
@@ -607,7 +608,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false)
     flush(logfile)
     close(logfile)
 
-    return timing_info
+    return timing_info, safety_result_mat
 end
 
 ###############################################################################################

@@ -21,14 +21,6 @@ function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ,
         Pr_noise = 1.
     end
 
-    function margin_extent(extent, ep)
-        new_dict = Dict()
-        for dim_key in keys(extent)
-            new_dict[dim_key] = [extent[dim_key][1] + ep, extent[dim_key][2] - ep]
-        end
-        return return new_dict 
-    end
-
     Sshrink = margin_extent(S, ϵ_noise)
     Sexpand = margin_extent(S, -ϵ_noise)
 
@@ -68,7 +60,11 @@ function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ,
             maxPr_UB = 1.
         end
     else
-        shrink_ϵ = ϵ
+        sd_min = Inf
+        for dim_key in keys(Sshrink)
+            sd_min = minimum([sd_min, abs(Sshrink[dim_key][1]-Sshrink[dim_key][2])])
+        end
+        shrink_ϵ = minimum([ϵ, sd_min])
         expand_ϵ = ϵ
 
         P_bound_lower = calculate_probability_bound(gp_info_dict, σ_bounds, shrink_ϵ)
@@ -87,6 +83,14 @@ end
 ###############################################################################################
 # Local Methods
 ###############################################################################################
+function margin_extent(extent, ep)
+    new_dict = Dict()
+    for dim_key in keys(extent)
+        new_dict[dim_key] = [extent[dim_key][1] + ep, extent[dim_key][2] - ep]
+    end
+    return return new_dict 
+end
+
 function extent_to_shape(extent)
     extent_arrays = [extent[dim_key] for dim_key in keys(extent)]
     vert_tuples = collect(Base.product(extent_arrays...))
