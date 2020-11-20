@@ -54,6 +54,7 @@ end
 
 mutable struct DataParameters 
     data_num::Int
+    data_num_optimize::Int
     bound_type::String
     noise_sigma::Float64
     epsilon::Float64
@@ -379,6 +380,9 @@ function generate_estimates(params, x_train, y_train; reuse_gp_flag=false)
             m_prior = MeanZero()
             k_prior = SE(ls, 0.)
             lnoise = log(sqrt(1+2/params.data_params.data_num)) # Generalize to handle any bound
+            opt_idx = StatsBase.sample(1:length(y_train[:,1]), params.data_params.data_num_optimize, replace = false)
+            gp_pre = GP(x_train_sub[opt_idx, :]', y_train[opt_idx,i], m_prior, k_prior, lnoise) 
+            optimize!(gp_pre)
             gp = GP(x_train_sub', y_train[:,i], m_prior, k_prior, lnoise)
             gp_set["x$i"] = deepcopy(gp)
         end
@@ -521,7 +525,13 @@ end
 
 function save_transition_matrices(params, res_mats)
     exp_dir = create_experiment_directory(params)
-    tmat_filename = "$exp_dir/transition_mats.mat"
+    basename = "transition_mats"
+    for dim_key in keys(params.discretization_step)
+        basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
+    end
+    basename = @sprintf("%s-%0.2f", basename, params.data_params.epsilon)
+    basename = "$basename.mat"
+    tmat_filename = "$exp_dir/$basename"
     matwrite(tmat_filename, res_mats) 
 end
 
@@ -608,7 +618,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false, re
     flush(logfile)
     close(logfile)
 
-    return timing_info, safety_result_mat
+    return timing_info, safety_result_mat, result_mats
 end
 
 ###############################################################################################

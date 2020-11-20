@@ -23,54 +23,60 @@ function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ,
 
     Sshrink = margin_extent(S, ϵ_noise)
     Sexpand = margin_extent(S, -ϵ_noise)
-
     s_shape = extent_to_shape(Sshrink)
     S_shape = extent_to_shape(Sexpand)
+
     Q_shape = extent_to_shape(Q_post_extent)
     n_dims = length(safe_keys)
     axes = I+zeros(n_dims, n_dims)
 
-    if ϵ < 0
-        shrink_int, shrink_ϵ = does_shape2_contain_shape1(Q_shape, s_shape, axes=axes)
-        expand_int, expand_ϵ = do_shapes_intersect(Q_shape, S_shape, axes=axes)
-        if (shrink_int && !expand_int)
-            @info "Shrink Flag: ", shrink_int, "Expand Flag: ", expand_int
-            @info "Q Post Extent: ", Q_post_extent 
-            @info "Q Post Shape: ", Q_shape
-            @info "S Extent: ", S
-            @info "S Shrink Ex: ", Sshrink
-            @info "S Shrink Shape: ", s_shape
-            @info "S Expand Ex: ", Sexpand
-            @info "S Expand Shape: " S_shape
-            @info "Shrink Ep: ", shrink_ϵ, "Expand Ep: ", expand_ϵ 
-            @error "You cannot both interesect and not intersect at the same time!"
-        end
-
-        if shrink_int 
-            P_bound_lower = calculate_probability_bound(gp_info_dict, σ_bounds, shrink_ϵ)
-            minPr_LB = P_bound_lower*Pr_noise 
-        else
-            minPr_LB = 0.
-        end
-    
-        if !expand_int 
-            Pr_bound_upper = calculate_probability_bound(gp_info_dict, σ_bounds, expand_ϵ)
-            maxPr_UB = 1. - Pr_bound_upper
-        else
-            maxPr_UB = 1.
-        end
-    else
+    if ϵ > 0
+        # Manual Epsilon Choice
         sd_min = Inf
         for dim_key in keys(Sshrink)
-            sd_min = minimum([sd_min, abs(Sshrink[dim_key][1]-Sshrink[dim_key][2])])
+            sd_min = minimum([sd_min, 0.5*abs(Sshrink[dim_key][1]-Sshrink[dim_key][2])])
         end
         shrink_ϵ = minimum([ϵ, sd_min])
         expand_ϵ = ϵ
 
+        Sshrink2 = margin_extent(S, shrink_ϵ)
+        Sexpand2 = margin_extent(S, -expand_ϵ)
+        s_shape2 = extent_to_shape(Sshrink2)
+        S_shape2 = extent_to_shape(Sexpand2)
+
+        shrink_int, _ = does_shape2_contain_shape1(Q_shape, s_shape2, axes=axes)
+        expand_int, _ = do_shapes_intersect(Q_shape, S_shape2, axes=axes)
+    else
+        # Auto Epsilon Choice
+        shrink_int, shrink_ϵ = does_shape2_contain_shape1(Q_shape, s_shape, axes=axes)
+        expand_int, expand_ϵ = do_shapes_intersect(Q_shape, S_shape, axes=axes)
+    end
+
+    if (shrink_int && !expand_int)
+        @info "Shrink Flag: ", shrink_int, "Expand Flag: ", expand_int
+        @info "Q Post Extent: ", Q_post_extent 
+        @info "Q Post Shape: ", Q_shape
+        @info "S Extent: ", S
+        @info "S Shrink Ex: ", Sshrink
+        @info "S Shrink Shape: ", s_shape
+        @info "S Expand Ex: ", Sexpand
+        @info "S Expand Shape: " S_shape
+        @info "Shrink Ep: ", shrink_ϵ, "Expand Ep: ", expand_ϵ 
+        @error "You cannot both interesect and not intersect at the same time!"
+    end
+
+    if shrink_int 
         P_bound_lower = calculate_probability_bound(gp_info_dict, σ_bounds, shrink_ϵ)
         minPr_LB = P_bound_lower*Pr_noise 
+    else
+        minPr_LB = 0.
+    end
+
+    if !expand_int 
         Pr_bound_upper = calculate_probability_bound(gp_info_dict, σ_bounds, expand_ϵ)
         maxPr_UB = 1. - Pr_bound_upper
+    else
+        maxPr_UB = 1.
     end
 
     @assert maxPr_UB >= minPr_LB
