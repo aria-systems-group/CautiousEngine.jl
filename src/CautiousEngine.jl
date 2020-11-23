@@ -340,6 +340,9 @@ function create_experiment_directory(params)
     else
         data_tag = "known-system"
     end
+    for dim_key in keys(params.discretization_step)
+        data_tag = @sprintf("%s-%0.3f", data_tag, params.discretization_step[dim_key])
+    end
     exp_dir = @sprintf("%s/modes/%s/%s", params.experiment_directory, params.system_params.mode_tag, data_tag)
     !isdir(exp_dir) && mkpath(exp_dir)
     return exp_dir
@@ -419,12 +422,7 @@ end
 function generate_region_images(params, gp_info_dict; reuse_regions_flag=false)
 
     exp_dir = create_experiment_directory(params)
-    basename = "regions"
-    for dim_key in keys(params.discretization_step)
-        basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
-    end
-    basename = "$basename.bson"
-    region_filename = "$exp_dir/$basename"
+    region_filename = "$exp_dir/regions.bson"
 
     if reuse_regions_flag && isfile(region_filename)
         region_data = BSON.load(region_filename)
@@ -470,12 +468,7 @@ end
 function save_region_data(params, region_data)
     @info "Saving the region data to the experiment directory..."
     exp_dir = create_experiment_directory(params)
-    basename = "regions"
-    for dim_key in keys(params.discretization_step)
-        basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
-    end
-    basename = "$basename.bson"
-    region_filename = "$exp_dir/$basename"
+    region_filename = "$exp_dir/regions.bson"
 
     bson(region_filename, region_data)
 end
@@ -525,13 +518,7 @@ end
 
 function save_transition_matrices(params, res_mats)
     exp_dir = create_experiment_directory(params)
-    basename = "transition_mats"
-    for dim_key in keys(params.discretization_step)
-        basename = @sprintf("%s-%0.3f", basename, params.discretization_step[dim_key])
-    end
-    basename = @sprintf("%s-%0.2f", basename, params.data_params.epsilon)
-    basename = "$basename.mat"
-    tmat_filename = "$exp_dir/$basename"
+    tmat_filename = "$exp_dir/transition_mats.mat"
     matwrite(tmat_filename, res_mats) 
 end
 
