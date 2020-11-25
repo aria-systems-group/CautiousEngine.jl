@@ -23,6 +23,7 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
+MAT = "0.9"
 julia = "1"
 
 [extras]
