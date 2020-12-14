@@ -1,3 +1,40 @@
+function BoundedUntil(imdp, phi1, phi2, k, imdp_filepath)
+
+    labels_vector = Array{String}(undef, length(imdp.states))
+    for label_key in keys(imdp.labels)
+        labels_vector[label_key] = imdp.labels[label_key]
+    end
+    
+    # Get the Qyes and Qno states
+    Qyes = findall(x->x==phi2, labels_vector)
+    @info Qyes
+    Qno = isnothing(phi1) ? [] : findall(x->!(x==phi1 || x==phi2), labels_vector)
+    @info Qno
+
+    # Write them to the file
+    write_imdp_to_file_bounded(imdp, Qyes, Qno, imdp_filepath)
+
+    # Do verification 
+    result_mat = run_bounded_imdp_verification(imdp_filepath, k)
+
+    # Done-zoe
+    return result_mat 
+end
+
+function Globally(imdp, phi, k, imdp_filepath)
+
+    phi1 = nothing
+    phi2 = "!$phi"
+
+    result_mat = BoundedUntil(imdp, phi1, phi2, k, imdp_filepath)
+    safety_result_mat = zeros(size(result_mat))
+    safety_result_mat[:, 1] = result_mat[:, 1]
+    safety_result_mat[:, 2] = result_mat[:, 2]
+    safety_result_mat[:, 3] = 1 .- result_mat[:, 4]
+    safety_result_mat[:, 4] = 1 .- result_mat[:, 3]
+    return safety_result_mat
+end
+
 """
 Call the synthesis tool with the given parameters.
 """

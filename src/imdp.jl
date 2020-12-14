@@ -27,12 +27,16 @@ end
 "
 Create an IMDP from a set of transition bound matrices.
 "
-function create_single_mode_imdp(minPr, maxPr)
+function create_simple_imdp(minPr, maxPr)
     N, _ = size(minPr)
     Pbounds = hcat([[minPr[i, j]..maxPr[i,j] for i=1:N] for j=1:N]...)
     Q = collect(1:N)
     A = [1]
     labels = Dict()
+    for i=1:N-1
+        labels[i] = "safe"
+    end
+    labels[N] = "!safe"
     imdp = IMDP(Q, A, Pbounds, labels, nothing, 1)
     return imdp 
 end
@@ -46,6 +50,46 @@ function create_imdp_labels(labels_fn, imdp, extent_file)
             imdp.labels[length(imdp_state_extents)] = labels_fn(state, unsafe=true) 
         else
             imdp.labels[state_key] = labels_fn(state)
+        end
+    end
+end
+
+function write_imdp_to_file_bounded(imdp, Qyes, Qno, filename)
+    open(filename, "w") do f
+        state_num = length(imdp.states)
+        action_num =length(imdp.actions)
+        @printf(f, "%d \n", state_num)
+        @debug "Length actions: " length(imdp.actions)
+        @printf(f, "%d \n", length(imdp.actions))
+        # Get number of accepting states from the labels vector
+        acc_states = Qyes 
+        @printf(f, "%d \n", length(acc_states))
+        [@printf(f, "%d ", acc_state-1) for acc_state in acc_states]
+        @printf(f, "\n")
+        sink_states = Qno 
+
+        for i=1:state_num
+            if isnothing(sink_states) || !(i∈sink_states)
+                for action in imdp.actions
+                    row_idx = (i-1)*action_num + action
+                    ij = findall(>(0.), maximum.(imdp.Pbounds[(i-1)*action_num + action, :]))   
+                    # Something about if the upper bound is less than one? Perhaps for numerical issues?
+                    @debug action, i
+                    psum = sum(maximum.(imdp.Pbounds[row_idx, :]))
+                    psum >= 1 ? nothing : throw(AssertionError("Bad max sum: $psum")) 
+                    for j=ij
+                        @printf(f, "%d %d %d %f %f", i-1, action-1, j-1, minimum(imdp.Pbounds[row_idx, j]), maximum(imdp.Pbounds[row_idx, j]))
+                        if (i < state_num || j < ij[end] || action < action_num)
+                            @printf(f, "\n")
+                        end
+                    end
+                end
+            else
+                @printf(f, "%d %d %d %f %f", i-1, 0, i-1, 1.0, 1.0)
+                if i<state_num
+                    @printf(f, "\n")
+                end
+            end
         end
     end
 end

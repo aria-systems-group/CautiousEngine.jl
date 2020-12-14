@@ -645,28 +645,6 @@ function save_transition_matrices(params, res_mats)
     matwrite(tmat_filename, res_mats) 
 end
 
-function perform_imdp_verification(params, res_mats, horizon; simply_safe=true)
-    exp_dir = create_experiment_directory(params)
-    imdp = create_single_mode_imdp(res_mats["minPr"], res_mats["maxPr"])
-    # TODO: Need to generalize this!!!!!!
-    if simply_safe
-        unsafe_states = [length(imdp.states)]
-        # All of this should be inside "verify IMDP"
-        pimdp = construct_PIMDP_from_IMDP(imdp, unsafe_states)
-        filename = "$exp_dir/test-pimdp.txt"
-        write_pimdp_to_file(pimdp, filename)
-        result_mat = run_bounded_imdp_verification(filename, horizon)
-        safety_result_mat = zeros(size(result_mat))
-        safety_result_mat[:, 1] = result_mat[:, 1]
-        safety_result_mat[:, 2] = result_mat[:, 2]
-        safety_result_mat[:, 3] = 1 .- result_mat[:, 4]
-        safety_result_mat[:, 4] = 1 .- result_mat[:, 3]
-    end
-
-    save_legacy_mats(safety_result_mat, exp_dir, horizon)
-    return safety_result_mat
-end
-
 function save_time_info(params, time_info)
     exp_dir = create_experiment_directory(params)
     time_filename = "$exp_dir/time_info.bson"
@@ -674,6 +652,7 @@ function save_time_info(params, time_info)
 end
 
 function end_to_end_transition_bounds(params; single_mode_verification=false, reuse_regions_flag=false) 
+    exp_dir = create_experiment_directory(params)
     logfile = initialize_log(params)
     @info "Generating the training data..."
     total_runtime = 0.
@@ -711,11 +690,12 @@ function end_to_end_transition_bounds(params; single_mode_verification=false, re
  
     safety_result_mat = nothing
     if single_mode_verification
-        @info "Performing safety verification on single mode..."
+        @info "Performing safety verification on single mode for 1 step..."
         verification_time = @elapsed begin 
-            # script_path = "/Users/john/Projects/Julia/BMDPVerification"
-            # run_MATLAB_verification(script_path, create_experiment_directory(params), -1, params.verification_mode)
-            safety_result_mat = perform_imdp_verification(params, result_mats, 1)
+            imdp = create_simple_imdp(result_mats["minPr"], result_mats["maxPr"])
+            horizon=1
+            verification_result_mat = Globally(imdp, "safe", horizon, "$exp_dir/imdp.txt")
+            save_legacy_mats(verification_result_mat, exp_dir, horizon)
         end
         timing_info["single_verification_time_s"] = verification_time  
         @info "Verification time: " verification_time
@@ -728,7 +708,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false, re
     flush(logfile)
     close(logfile)
 
-    return timing_info, safety_result_mat, result_mats
+    return timing_info, verification_result_mat, result_mats
 end
 
 function end_to_end_transition_bounds_local_gps(params; single_mode_verification=false, reuse_regions_flag=false) 
@@ -763,8 +743,6 @@ function end_to_end_transition_bounds_local_gps(params; single_mode_verification
     if single_mode_verification
         @info "Performing safety verification on single mode..."
         verification_time = @elapsed begin 
-            # script_path = "/Users/john/Projects/Julia/BMDPVerification"
-            # run_MATLAB_verification(script_path, create_experiment_directory(params), -1, params.verification_mode)
             safety_result_mat = perform_imdp_verification(params, result_mats, 1)
         end
         timing_info["single_verification_time_s"] = verification_time  
