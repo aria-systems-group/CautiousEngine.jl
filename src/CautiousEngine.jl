@@ -688,7 +688,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false, re
     @info "Bound generation time: " bound_time
     save_transition_matrices(params, result_mats)
  
-    safety_result_mat = nothing
+    verification_result_mat = nothing
     if single_mode_verification
         @info "Performing safety verification on single mode for 1 step..."
         verification_time = @elapsed begin 
