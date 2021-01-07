@@ -15,7 +15,9 @@ function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, m
     mat_files = filter(x -> occursin(r"globally-safe-.*.mat", x), readdir(results_path))
 
     if plot_gp
-        f = open("$results_path/gaussian_processes_set.bin")
+        files = readdir("$results_path/gps")
+        gp_file = filter(x->occursin(".bin", x), files)[1]
+        f = open("$results_path/gps/$gp_file")
         gp_set = deserialize(f)
         gp_x1 = gp_set["x1"]
         close(f)
@@ -161,7 +163,9 @@ function plot_gamma_value(results_path, min_ResMat, max_ResMat; num_dfa_states=1
 end
 
 function plot_gp_fields(results_path, dyn_fn)
-    f = open("$results_path/gaussian_processes_set.bin")
+    files = readdir("$results_path/gps")
+    gp_file = filter(x->occursin(".bin", x), files)[1]
+    f = open("$results_path/gps/$gp_file")
     gp_set = deserialize(f)
     close(f)
     region_data = BSON.load("$results_path/regions.bson")

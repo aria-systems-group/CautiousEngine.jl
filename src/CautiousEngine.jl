@@ -100,7 +100,6 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
     region_time = @elapsed begin 
         region_dict, region_pairs, extents_dict = create_region_data_new(params.domain, params.discretization_step)
 
-        # Here, we can calculate the mean and covariance at lots of sampled points in each region
         region_post_dict = Dict()
 
         L = length(keys(region_dict))
@@ -156,6 +155,8 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
             df_row = [region_pair[1], region_pair[2], prange[1], prange[2], [-1.], [-1.]]
             push!(results_df, df_row)
         end
+
+        # TODO: Move this constructor to its own fcn
         num_states = length(keys(region_dict))
         minPr_mat = zeros((num_states, num_states))
         maxPr_mat = zeros((num_states, num_states))
@@ -186,12 +187,15 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
     @info "Bound generation time: " bound_time
     save_transition_matrices(params, result_mats)
 
+    verification_result_mat = nothing
+    exp_dir = create_experiment_directory(params)
     if single_mode_verification
-        @info "Performing safety verification on single mode..."
+        @info "Performing safety verification on single mode for 1 step..."
         verification_time = @elapsed begin 
-            # script_path = "/Users/john/Projects/Julia/BMDPVerification"
-            # run_MATLAB_verification(script_path, create_experiment_directory(params), -1, params.verification_mode)
-            perform_imdp_verification(params, result_mats, 1)
+            imdp = create_simple_imdp(result_mats["minPr"], result_mats["maxPr"])
+            horizon=1
+            verification_result_mat = Globally(imdp, "safe", horizon, "$exp_dir/imdp.txt")
+            save_legacy_mats(verification_result_mat, exp_dir, horizon)
         end
         timing_info["single_verification_time_s"] = verification_time  
         @info "Verification time: " verification_time
@@ -204,45 +208,7 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
     flush(logfile)
     close(logfile)
 
-    return timing_info
-
-    # Holder of the metadata rows
-    
-
-    # TODO: Save time info to log file
-    
-
-    # Save the matrices for use in MATLAB verification tool
-    save_mats = false
-    if save_mats
-        @info "Saving matrices in MATLAB format..."
-        num_states = length(keys(region_dict))
-        A_min = zeros((num_states, num_states))
-        A_max = zeros((num_states, num_states))
-        for i = 1:1:num_states
-            sub_row = results_df[results_df.Set1 .== i, :]
-            if i == num_states
-                A_min[i, num_states] = 1.
-                A_max[i, num_states] = 1.
-            else
-                for j = 1:1:num_states
-                    if j == num_states
-                        subsub_row = sub_row[sub_row.Set2 .== -11, :]
-                        A_min[i, j] = 1. - subsub_row.MaxPr[1]
-                        A_max[i, j] = 1. - subsub_row.MinPr[1]
-                    else
-                        subsub_row = sub_row[sub_row.Set2 .== j, :]
-                        A_min[i, j] = subsub_row.MinPr[1]
-                        A_max[i, j] = subsub_row.MaxPr[1]
-                    end
-                end
-            end
-        end
-
-        matwrite("$exp_dir/transition_mats.mat", Dict("minPr" => A_min, "maxPr" => A_max))
-
-    end
-  
+    return timing_info, verification_result_mat, result_mats
 end
 
 # TODO: This will eventually be the end-to-end function
