@@ -15,7 +15,6 @@ using Random
 using Distributions
 using StatsBase
 using Serialization
-using MATLAB
 using MAT
 using Printf
 using IntervalSets
@@ -220,6 +219,18 @@ end
 
 # end
 
+# function perform_verification_from_result_dirs(res_dirs, exp_dir, system_tag, spec_file, label_fcn; 
+#                                                plot_graphs=true, rerun_flag=false, modes=nothing, add_opt=false,
+#                                                region_specific="", num_sims=10, sim_points=nothing)
+#     @info "Creating the IMDP..."
+#     imdp = create_imdp_from_result_dirs(res_dirs, "$exp_dir/$system_tag")    
+#     regions_file = @sprintf("%s/regions%s.bson", res_dirs[1], region_specific)
+#     create_imdp_labels(label_fcn, imdp, regions_file)
+#     plot_graphs ? create_graph_from_imdp(imdp, "$exp_dir/$system_tag/imdp.gv") : nothing
+#     function run_bounded_imdp_verification(imdp_file, k)
+                                           
+# end
+
 function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_file, label_fcn; 
                                             plot_graphs=true, rerun_flag=false, modes=nothing, add_opt=false,
                                             region_specific="", num_sims=10, sim_points=nothing)
@@ -286,6 +297,7 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
                 x0 = 4*rand(mt,2,1)[:]-[2.; 2.]
             end
             res = BSON.load(regions_file)
+            # TODO: This noise distribution needs to change for the sims
             noise_dist = TruncatedNormal(0, 0.01, -0.01, 0.01)
             simulate_system(x0, modes, 100, imdp, pimdp, dfa, res[:extents], res_mat[:,2], noise_dist=noise_dist)
             push!(trajectories, copy(pimdp.trajectory))

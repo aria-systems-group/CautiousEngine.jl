@@ -15,9 +15,12 @@ function BoundedUntil(imdp, phi1, phi2, k, imdp_filepath)
     write_imdp_to_file_bounded(imdp, Qyes, Qno, imdp_filepath)
 
     # Do verification 
-    result_mat = run_bounded_imdp_verification(imdp_filepath, k)
-
-    # Done-zoe
+    if !isnothing(phi1)
+        result_mat = run_bounded_imdp_verification(imdp_filepath, k)
+    else
+        result_mat = run_imdp_synthesis(imdp_filepath, k; ep=1e-6, mode1="maximize", mode2="optimistic", save_mats=true)
+    end
+        # Done-zoe
     return result_mat 
 end
 
@@ -44,7 +47,7 @@ function run_imdp_synthesis(imdp_file, k; ep=1e-6, mode1="maximize", mode2="pess
     filter_res = replace(res, "\n"=>" ")
     res_split = split(filter_res)
     dst_dir = dirname(imdp_file)
-    open("$dst_dir/verification-result.txt", "w") do f
+    open("$dst_dir/verification-result-$k.txt", "w") do f
         print(f, res) 
     end
     print(res)
@@ -73,9 +76,9 @@ Call the MATLAB verification tool.
 """
 function run_MATLAB_verification(script_path, exp_dir, k, verification_mode)
     @info "Performing BMDP Verification..."
-    mat"cd($script_path)"
-    mat"addpath(genpath('./'))"
-    mat"generateVerification($exp_dir,$verification_mode,$k)"
+    # mat"cd($script_path)"
+    # mat"addpath(genpath('./'))"
+    # mat"generateVerification($exp_dir,$verification_mode,$k)"
 end
 
 """
