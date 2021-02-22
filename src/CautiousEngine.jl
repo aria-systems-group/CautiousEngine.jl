@@ -363,7 +363,7 @@ function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filen
             x_train_sub = x_train[:, findall(.>(0), data_deps[out_dim])[:]]
             m_prior = MeanZero()
             k_prior = SE(ls, 0.)
-            lnoise = log(sqrt(1+2/params.data_params.data_num)) # Generalize to handle any bound
+            lnoise = log(sqrt(1+2/length(x_train_sub))) # Generalize to handle any bound
             # opt_idx = StatsBase.sample(1:length(y_train[:,1]), params.data_params.data_num_optimize, replace = false)
             # gp_pre = GP(x_train_sub[opt_idx, :]', y_train[opt_idx,i], m_prior, k_prior, lnoise) 
             # optimize!(gp_pre)
@@ -690,6 +690,7 @@ function end_to_end_transition_bounds(params; single_mode_verification=false, re
 end
 
 function end_to_end_transition_bounds_local_gps(params; single_mode_verification=false, reuse_regions_flag=false) 
+    exp_dir = create_experiment_directory(params)
     logfile = initialize_log(params)
     @info "Generating the training data..."
     total_runtime = 0.
@@ -719,9 +720,12 @@ function end_to_end_transition_bounds_local_gps(params; single_mode_verification
  
     safety_result_mat = nothing
     if single_mode_verification
-        @info "Performing safety verification on single mode..."
+        @info "Performing safety verification on single mode for 1 step..."
         verification_time = @elapsed begin 
-            safety_result_mat = perform_imdp_verification(params, result_mats, 1)
+            imdp = create_simple_imdp(result_mats["minPr"], result_mats["maxPr"])
+            horizon=1
+            verification_result_mat = Globally(imdp, "safe", horizon, "$exp_dir/imdp.txt")
+            save_legacy_mats(verification_result_mat, exp_dir, horizon)
         end
         timing_info["single_verification_time_s"] = verification_time  
         @info "Verification time: " verification_time
@@ -744,7 +748,7 @@ end
 function create_gp_info(params, gp_set, dim_key)
     gp = gp_set[dim_key]
 
-    scale_factor = params.data_params.bound_type == "rkhs-tight" ? params.data_params.noise_sigma/sqrt(1. + 2. / params.data_params.data_num) : 1.
+    scale_factor = params.data_params.bound_type == "rkhs-tight" ? params.data_params.noise_sigma/sqrt(1. + 2. / gp.nobs) : 1.
     # @info "Scale factor: $scale_factor"
     domain = params.domain
     diam_domain = 0.
@@ -759,8 +763,8 @@ function create_gp_info(params, gp_set, dim_key)
     # @info "RKHS Norm Bound in $dim_key: ", RKHS_bound
 
     # B = 1 + (params.data_params.noise_sigma)^(-2)
-    B = 1 + (1 + 2/(params.data_params.data_num))^(-1)
-    γ = 0.5*params.data_params.data_num*log(B)
+    B = 1 + (1 + 2/(gp.nobs))^(-1)
+    γ = 0.5*gp.nobs*log(B)
     # @info "Info gain term in $dim_key: ", γ
 
     K_inv = inv(gp.cK.mat + exp(gp.logNoise.value)^2*I)
