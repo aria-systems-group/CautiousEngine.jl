@@ -61,6 +61,7 @@ mutable struct DataParameters
     epsilon::Float64
     eta::Float64
     safety_dims
+    local_radius::Float64
 end
 
 # TODO: Switch to params structure
@@ -421,7 +422,7 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
                 ub = [extent[dim_key][2] for dim_key in dim_keys]
                 # Assume 2D
                 center = [mean(lb) mean(ub)]
-                radius = 0.5
+                radius = params.data_params.local_radius
                 x_sub, y_sub = get_points_in_neighborhood(center, radius, x_train, y_train)
                 gp_set, gp_info_dict = generate_estimates(params, x_sub, y_sub, filename_appendix=i) 
                 save_gp_info(params, gp_set, gp_info_dict, save_global_gps=false, filename_appendix=i)
