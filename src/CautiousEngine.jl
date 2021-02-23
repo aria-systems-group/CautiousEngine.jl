@@ -38,6 +38,8 @@ include("multimodal.jl")
 include("visualize.jl")
 include("intersection.jl")
 include("run_simulation.jl")
+include("online_control.jl")
+include("gps.jl")
 
 struct SystemParameters
     mode_tag::String
@@ -395,14 +397,18 @@ function save_gp_info(params, gp_set, gp_info_dict; save_global_gps=true, filena
             serialize(f, gp_set)
         end
     end
-    
+   
+    gp_save_info = Dict()
+    gp_save_info[:gp_set] = gp_set
+    gp_save_info[:gp_info] = gp_info_dict
+
     local_gp_dir = "$exp_dir/gps"
     !isdir(local_gp_dir) && mkpath(local_gp_dir)
     gps_filename = @sprintf("%s-m%d-σ%1.3f-rs%d-gps", params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
     gps_filename = isnothing(filename_appendix) ? gps_filename : "$gps_filename-$filename_appendix"
     local_gp_file = "$local_gp_dir/$gps_filename.bin"
     open(local_gp_file, "w") do f
-        serialize(f, gp_set)
+        serialize(f, gp_save_info)
     end
     # TODO: Save the entire info dict
 end
