@@ -68,7 +68,6 @@ function construct_DFA_IMDP_product(dfa, imdp)
                         col_idx = (sq[1]-1)*sizeQ + sq[2]  
                         Pbounds_new[row_idx, :] .= [0.0..0.0]
                         Pbounds_new[row_idx, col_idx] = 1.0..1.0
-                        break
                     else
                         col_idx = (sqp[1]-1)*sizeQ + sqp[2]
                         Pbounds_new[row_idx, col_idx] = Pbounds[(sq[1]-1)*sizeA + a, sqp[1]]
@@ -111,7 +110,7 @@ function write_pimdp_to_file(pimdp, filename)
             if isnothing(sink_states) || !(i∈sink_states)
                 for action in pimdp.actions
                     row_idx = (i-1)*action_num + action
-                    ij = findall(>(0.), maximum.(pimdp.Pbounds[(i-1)*action_num + action, :]))   
+                    ij = findall(>(0.), maximum.(pimdp.Pbounds[row_idx, :]))   
                     # Something about if the upper bound is less than one? Perhaps for numerical issues?
                     @debug action, i
                     psum = sum(maximum.(pimdp.Pbounds[row_idx, :]))
@@ -125,11 +124,50 @@ function write_pimdp_to_file(pimdp, filename)
                     end
                 end
             else
-                @printf(f, "%d %d %d %f %f", i-1, 0, i-1, 1.0, 1.0)
-                if i<state_num
-                    @printf(f, "\n")
-                end
+                [@printf(f, "%d %d %d %f %f\n", i-1, j, i-1, 1.0, 1.0) for j=0:action_num-1]
             end
         end
+    end
+end
+
+"""
+Read a PIMDP from file.
+"""
+function read_pimdp_from_file(filename)
+    pimdp = nothing
+    open(filename, "r") do f
+        num_states = tryparse(Int, readline(f))
+        num_actions = tryparse(Int, readline(f)) 
+        num_sink_states = tryparse(Int, readline(f))
+        sink_states = parse.(Int, split(readline(f)))
+        Pbounds = hcat([[0.0..0.0 for i=1:num_states*num_actions] for j=1:num_states]...) 
+        while !eof(f)
+            row_split = split(readline(f))
+            if length(row_split) > 0
+                q0 = parse(Int, row_split[1])
+                a = parse(Int, row_split[2]) + 1
+                qt = parse(Int, row_split[3])
+                plow = parse(Float64, row_split[4])
+                phigh = parse(Float64, row_split[5])
+                row_idx = q0*num_actions + a 
+                col_idx = qt + 1
+                Pbounds[row_idx, col_idx] = plow..phigh
+            end
+        end
+
+        pimdp = PIMDP(collect(1:num_states), collect(1:num_actions), Pbounds, 
+        nothing, nothing, sink_states, nothing, nothing, nothing, nothing)
+    end
+
+    return pimdp
+end
+
+"""
+Quickly Validate a (P)IMDP object.
+"""
+function validate_pimdp(pimdp)
+    for row in eachrow(pimdp.Pbounds)
+        @assert sum(maximum.(row)) >= 1
+        @assert sum(minimum.(row)) <= 1
     end
 end
