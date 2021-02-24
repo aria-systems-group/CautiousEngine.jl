@@ -139,7 +139,7 @@ function read_pimdp_from_file(filename)
         num_states = tryparse(Int, readline(f))
         num_actions = tryparse(Int, readline(f)) 
         num_sink_states = tryparse(Int, readline(f))
-        sink_states = parse.(Int, split(readline(f)))
+        accept_states = parse.(Int, split(readline(f))) .+ 1
         Pbounds = hcat([[0.0..0.0 for i=1:num_states*num_actions] for j=1:num_states]...) 
         while !eof(f)
             row_split = split(readline(f))
@@ -156,7 +156,7 @@ function read_pimdp_from_file(filename)
         end
 
         pimdp = PIMDP(collect(1:num_states), collect(1:num_actions), Pbounds, 
-        nothing, nothing, sink_states, nothing, nothing, nothing, nothing)
+        nothing, accept_states, [], nothing, nothing, nothing, nothing)
     end
 
     return pimdp

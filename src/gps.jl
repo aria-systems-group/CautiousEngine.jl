@@ -1,6 +1,6 @@
 # Methods related to all things GP regression
 
-struct GPInfo
+mutable struct GPInfo
     gp
     γ_bound::Float64
     RKHS_bound::Float64
@@ -66,6 +66,59 @@ function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filen
     # create_plots ? plot_gp_fields(exp_dir, dyn_fn) : nothing
 
     return gp_set, gp_info_dict
+end
+
+"""
+Create the GP Info structure componenets.
+"""
+function create_gp_info(params, gp_set, dim_key)
+    gp = gp_set[dim_key]
+
+    scale_factor = params.data_params.bound_type == "rkhs-tight" ? params.data_params.noise_sigma/sqrt(1. + 2. / gp.nobs) : 1.
+    # @info "Scale factor: $scale_factor"
+    domain = params.domain
+    diam_domain = 0.
+    for dim_key in keys(domain)
+        diam_domain += (domain[dim_key][1] - domain[dim_key][2])^2
+    end
+    diam_domain = sqrt(diam_domain)
+    σ_inf = sqrt(gp.kernel.σ2*exp(-1/2*(diam_domain)^2/gp.kernel.ℓ2))
+
+    # Calculating the RKHS parameter bounds
+    RKHS_bound = abs(domain[dim_key][2] + params.system_params.lipschitz_bound*diam_domain)/ σ_inf
+    # @info "RKHS Norm Bound in $dim_key: ", RKHS_bound
+
+    # B = 1 + (params.data_params.noise_sigma)^(-2)
+    B = 1 + (1 + 2/(gp.nobs))^(-1)
+    γ = 0.5*gp.nobs*log(B)
+    # @info "Info gain term in $dim_key: ", γ
+
+    K_inv = inv(gp.cK.mat + exp(gp.logNoise.value)^2*I)
+    gp_info = GPInfo(gp, γ, RKHS_bound, params.data_params.bound_type, scale_factor, K_inv)
+
+    return gp_info
+end
+
+"""
+Update the GP Info after updating the gp
+"""
+function update_gp_info(gp_info)
+    gp = gp_info.gp 
+    bound_type = gp_info.bound_type
+
+    old_nobs = size(gp_info.Kinv)[1]
+    scale_factor = gp_info.bound_type == "rkhs-tight" ? gp_info.post_scale_factor*sqrt(1. + 2. / (old_nobs))/sqrt(1. + 2. / gp.nobs) : 1.
+
+    B = 1 + (1 + 2/(gp.nobs))^(-1)
+    γ = 0.5*gp.nobs*log(B)
+
+    K_inv = inv(gp.cK.mat + exp(gp.logNoise.value)^2*I)
+
+    gp_info.post_scale_factor = scale_factor
+    gp_info.Kinv = K_inv
+    gp_info.γ_bound = γ
+
+    return nothing
 end
 
 """

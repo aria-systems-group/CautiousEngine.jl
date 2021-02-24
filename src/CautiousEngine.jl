@@ -672,34 +672,6 @@ end
 # Local Methods
 ###############################################################################################
 
-function create_gp_info(params, gp_set, dim_key)
-    gp = gp_set[dim_key]
-
-    scale_factor = params.data_params.bound_type == "rkhs-tight" ? params.data_params.noise_sigma/sqrt(1. + 2. / gp.nobs) : 1.
-    # @info "Scale factor: $scale_factor"
-    domain = params.domain
-    diam_domain = 0.
-    for dim_key in keys(domain)
-        diam_domain += (domain[dim_key][1] - domain[dim_key][2])^2
-    end
-    diam_domain = sqrt(diam_domain)
-    σ_inf = sqrt(gp.kernel.σ2*exp(-1/2*(diam_domain)^2/gp.kernel.ℓ2))
-
-    # Calculating the RKHS parameter bounds
-    RKHS_bound = abs(domain[dim_key][2] + params.system_params.lipschitz_bound*diam_domain)/ σ_inf
-    # @info "RKHS Norm Bound in $dim_key: ", RKHS_bound
-
-    # B = 1 + (params.data_params.noise_sigma)^(-2)
-    B = 1 + (1 + 2/(gp.nobs))^(-1)
-    γ = 0.5*gp.nobs*log(B)
-    # @info "Info gain term in $dim_key: ", γ
-
-    K_inv = inv(gp.cK.mat + exp(gp.logNoise.value)^2*I)
-    gp_info = GPInfo(gp, γ, RKHS_bound, params.data_params.bound_type, scale_factor, K_inv)
-
-    return gp_info
-end
-
 # TODO: Fully implement this
 function bound_extent(extent, lb, ub, gp_info_dict, dim_keys, data_deps; known_part_flag=false)
 
