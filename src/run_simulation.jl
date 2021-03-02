@@ -64,9 +64,16 @@ end
 Find the enumeration of the state tuple in terms of the PIMDP state. 
 """
 function map_pimdp_state_to_index(state::Tuple, num_dfa_states::Int)
-    @info state
    index = (state[1]*num_dfa_states) - num_dfa_states + state[2]
    return index 
+end
+
+"""
+Find the row of the Pbounds matrix given the PIMDP state and action #
+"""
+function map_pimdp_state_to_Pmat_row(state::Tuple, num_dfa_states::Int, num_actions::Int, action::Int)
+    row_idx = (state[1]-1)*num_dfa_states*num_actions + (state[2]-1)*num_actions + action 
+    return row_idx
 end
 
 function propogate_pimdp_trajectory(pimdp, dfa, extent_dict, x_new)
@@ -132,7 +139,6 @@ function reset_pimdp(x0, imdp, dfa, pimdp, extent_dict, policy)
         extent = extent_dict[extent_id]
         if sum([extent[dim][1]<=x0[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x0)
             init_extent = extent_id 
-            @info init_extent
             break
         end
     end

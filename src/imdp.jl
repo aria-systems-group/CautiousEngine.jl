@@ -50,7 +50,7 @@ end
 function create_imdp_labels(labels_fn, imdp, imdp_state_extents::Dict)
     for state_key in keys(imdp_state_extents)
         state = imdp_state_extents[state_key]
-        if state_key == -11
+        if state_key == -11 || state_key == length(keys(imdp_state_extents))
             imdp.labels[length(imdp_state_extents)] = labels_fn(state, unsafe=true) 
         else
             imdp.labels[state_key] = labels_fn(state)
