@@ -1,7 +1,7 @@
 """
 Plot the results from file using the legacy format.
 """
-function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, plot_gamma=false)
+function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, plot_gamma=false, extents_dict=nothing)
     region_data = BSON.load("$results_path/regions.bson")
     region_pairs = region_data[:pairs]
     extents = region_data[:extents]
@@ -104,6 +104,16 @@ function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, m
                 if length(trajectory) > 1
                     [plot!([trajectory[i][1], trajectory[i+1][1]], [trajectory[i][2], trajectory[i+1][2]], color=:black, label="", linewith=2) for i=1:length(trajectory)-1]
                     scatter!([trajectory[end][1]], [trajectory[end][2]], color=:black, markershape=:star5, label="")
+                end
+            end
+
+            if !isnothing(extents_dict)
+                for key in keys(extents_dict)
+                    for extent in extents_dict[key]
+                        shape = extent_dict_to_shape(extent)
+                        @info shape
+                        plot!(shape, label="", color=:black, fillalpha=0.0)
+                    end
                 end
             end
             savefig(plt_min, "$results_path/$filename")
@@ -419,6 +429,17 @@ function plot_synthesis_results(results_path, res_mat, imdp, dfa, pimdp; plot_gp
     # end
 end
 
+function extent_dict_to_shape(extent)
+    xmin = minimum(extent["x1"])
+    xmax = maximum(extent["x1"])
+    ymin = minimum(extent["x2"])
+    ymax= maximum(extent["x2"])
+
+    x = [xmin, xmin, xmax, xmax]
+    y = [ymin, ymax, ymax, ymin]
+
+    return Plots.Shape(x, y)
+end
 
 # function plot_results_from_file_3d(results_path; plot_gp=false, min_threshold=0.95)
 #     region_data = BSON.load("$results_path/regions.bson")
