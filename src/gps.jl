@@ -100,6 +100,43 @@ function create_gp_info(params, gp_set, dim_key)
 end
 
 """
+Predict mean function
+"""
+function predict_N_steps(gp_info_dict, x0, N)
+    xp_trajectory = []
+    xc = x0
+    dim_keys = keys(gp_info_dict)
+
+    for i=1:N
+        xp = zeros(length(dim_keys), 1) 
+        for (j, key) in enumerate(dim_keys)
+            μ, _ = predict_f(gp_info_dict[key].gp, xc)
+            xp[j] = μ[1] 
+        end
+
+        push!(xp_trajectory, xp)
+        xc = xp
+    end
+
+    return xp_trajectory
+end
+
+"""
+Predict mean and vairance over one step
+"""
+function predict_one_step_full(gp_info_dict, x0; known_flag=true)
+    μ_dict = Dict()
+    σ_dict = Dict()
+    dim_keys = keys(gp_info_dict)
+    for (i, key) in enumerate(dim_keys)
+        μ, σ = predict_f(gp_info_dict[key].gp, x0)
+        μ_dict[key] = μ[1] + x0[i]
+        σ_dict[key] = σ[1]
+    end
+return μ_dict, σ_dict
+end
+
+"""
 Update the GP Info after updating the gp
 """
 function update_gp_info(gp_info)
