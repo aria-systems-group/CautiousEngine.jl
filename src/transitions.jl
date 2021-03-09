@@ -101,10 +101,6 @@ function point_region_transitions(μ::Dict, σ::Dict, target_region_idx, region_
         Q_post_extent[dim_key] = [μ[dim_key], μ[dim_key]] 
     end
 
-    # @info S, Q_post_extent, μ
-
-    # @info μ, S
-
     n_dims = length(μ)
 
     # For now, do a naiive shrink - first noise, then the next
@@ -175,7 +171,12 @@ function point_region_transitions(μ::Dict, σ::Dict, target_region_idx, region_
 
     @assert maxPr_UB >= minPr_LB
 
-    frame_row = [minPr_LB, maxPr_UB, [shrink_ϵ, expand_ϵ]]
+    if target_region_idx == length(keys(region_dict))
+        frame_row = [1-maxPr_UB, 1-minPr_LB, [shrink_ϵ, expand_ϵ]]
+    else
+        frame_row = [minPr_LB, maxPr_UB, [shrink_ϵ, expand_ϵ]]
+    end
+
     return frame_row
 end
 

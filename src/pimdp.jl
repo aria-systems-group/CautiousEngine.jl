@@ -171,3 +171,38 @@ function validate_pimdp(pimdp)
         @assert sum(minimum.(row)) <= 1
     end
 end
+
+
+"""
+Determine the IMDP state from the current PIMDP index and # of DFA states
+"""
+function pimdp_col_to_imdp_state(col, num_dfa_states)
+    return ceil(col/num_dfa_states)
+end
+
+
+"""
+% computes the true distribution given a range of distributions
+    
+% input:    pmin: lower bound transition probabilities
+%           pmax: upper bound transition probabilities
+%           indSorted: index of states according to their sorted list
+% output:
+%           p: true transition probability
+"""
+function get_true_transition_probabilities(pmin, pmax, indSorted)
+    p = zeros(1,length(pmax))
+    used = sum(pmin)
+    remain = 1 - used
+    
+    for i in indSorted
+        if pmax[i] <= (remain + pmin[i])
+            p[i] = pmax[i]
+        else
+            p[i] = pmin[i] + remain
+        end
+        remain = maximum([0., remain - (pmax[i] - pmin[i]) ])   
+    end
+
+    return p
+end
