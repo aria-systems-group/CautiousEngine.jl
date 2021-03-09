@@ -21,10 +21,10 @@ function check_pimdp_exit_conditions(pimdp::PIMDP)
     current_state_idx = map_pimdp_state_to_index(pimdp, current_state)
 
     if current_state_idx ∈ findall(>(0.), pimdp.accepting_labels[:])
-        @info "We have reached a positive accepting state. Exiting."
+        @debug "We have reached a positive accepting state. Exiting."
         return true
     elseif current_state_idx ∈ findall(>(0.), pimdp.sink_labels[:])
-        @info "We have reached a negative sink state. Booo. Exiting."
+        @debug "We have reached a negative sink state. Booo. Exiting."
         return true
     end
     return false 
@@ -38,13 +38,13 @@ function check_pimdp_exit_conditions(pimdp::PIMDP, num_dfa_states::Int)
     current_state_idx = map_pimdp_state_to_index(current_state, num_dfa_states)
 
     if current_state_idx ∈ pimdp.accepting_labels[:]
-        @info "We have reached a positive accepting state. Exiting."
-        return true
+        @debug "We have reached a positive accepting state. Exiting."
+        return 1 
     elseif current_state_idx ∈ pimdp.sink_labels[:]
-        @info "We have reached a negative sink state. Booo. Exiting."
-        return true
+        @debug "We have reached a negative sink state. Booo. Exiting."
+        return 0 
     end
-    return false 
+    return nothing 
 end
 
 """
@@ -117,8 +117,6 @@ function propogate_pimdp_trajectory_test(pimdp, dfa, extent_dict, x_new)
     else
         qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[new_extent])
     end
-    # push!(pimdp.state_history, (new_extent, qnew))
-    # push!(pimdp.trajectory, x_new)
 
     reward = 0.
     if qnew == dfa.sink_state
@@ -130,6 +128,38 @@ function propogate_pimdp_trajectory_test(pimdp, dfa, extent_dict, x_new)
     end
     
     return reward
+end
+
+"""
+Reward based on the worst-possible next DFA state
+"""
+function calculate_worst_dfa_reward(pimdp, dfa, possible_extents)
+    best_reward = Inf
+    for extent in possible_extents
+        qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[extent])
+        reward = -distance_from_accept_state(dfa, qnew)
+        if reward < best_reward
+            best_reward = reward
+        end
+    end
+
+    return best_reward
+end
+
+"""
+Reward based on the best-possible next DFA state
+"""
+function calculate_best_dfa_reward(pimdp, dfa, possible_extents)
+    best_reward = -Inf
+    for extent in possible_extents
+        qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[extent])
+        reward = -distance_from_accept_state(dfa, qnew)
+        if reward > best_reward
+            best_reward = reward
+        end
+    end
+
+    return best_reward
 end
 
 function reset_pimdp(x0, imdp, dfa, pimdp, extent_dict, policy)
