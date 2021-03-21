@@ -37,10 +37,12 @@ function check_pimdp_exit_conditions(pimdp::PIMDP, num_dfa_states::Int)
     current_state = pimdp.state_history[end]
     current_state_idx = map_pimdp_state_to_index(current_state, num_dfa_states)
 
-    if current_state_idx ∈ pimdp.accepting_labels[:]
+    acc_states = findall(>(0.), pimdp.accepting_labels[:])
+    sink_states = findall(>(0.), pimdp.sink_labels[:]) 
+    if current_state_idx ∈ acc_states 
         @debug "We have reached a positive accepting state. Exiting."
         return 1 
-    elseif current_state_idx ∈ pimdp.sink_labels[:]
+    elseif current_state_idx ∈ sink_states
         @debug "We have reached a negative sink state. Booo. Exiting."
         return 0 
     end
@@ -161,6 +163,11 @@ function calculate_best_dfa_reward(pimdp, dfa, possible_extents)
 
     return best_reward
 end
+
+"""
+Reward based on smallest distance to accept state in PIMDP
+"""
+
 
 function reset_pimdp(x0, imdp, dfa, pimdp, extent_dict, policy)
     init_extent = nothing
