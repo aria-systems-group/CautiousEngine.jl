@@ -21,6 +21,46 @@ function get_points_in_neighborhood(center, radius, x_train, y_train)
 end
 
 """
+Create GP From Given Data
+"""
+function train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=false, lnoise=nothing, opt_fraction=1.0)
+    gp_set = Dict()
+    dim_keys = ["x$i" for i=1:size(x_train,1)]
+    for (i, out_dim) in enumerate(dim_keys) 
+        # Handle data dependency here
+        # x_train_sub = x_train[:, findall(.>(0), data_deps[out_dim])[:]]
+        x_train_sub = x_train
+        gp = train_gp_1dim(x_train, y_train[i,:]; se_params=se_params, optimize_hyperparameters=optimize_hyperparameters, lnoise=lnoise, opt_fraction=opt_fraction)
+        
+        gp_set["x$i"] = deepcopy(gp)
+    end
+    return gp_set
+end
+
+function train_gp_1dim(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=false, lnoise=nothing, opt_fraction=1.0)
+    m_prior = MeanZero()
+    k_prior = SE(se_params[2], se_params[1])
+
+    if isnothing(lnoise)
+        lnoise = log(sqrt(1+2/length(x_train))) # Generalize to handle any bound
+    end
+
+    if optimize_hyperparameters
+        @assert 0 < opt_fraction <= 1
+        num_opt = Int(opt_fraction*length(x_train))
+        opt_idx = StatsBase.sample(1:length(y_train), num_opt, replace = false)
+        gp_pre = GP(x_train[:, opt_idx], y_train[opt_idx], m_prior, k_prior, lnoise) 
+        optimize!(gp_pre)
+    end
+
+    gp = GP(x_train, y_train, m_prior, k_prior, lnoise)
+    if optimize_hyperparameters
+        optimize!(gp)
+    end
+
+    return gp
+end
+"""
 Generate GP regression given the dataset.
 """
 function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filename_appendix=nothing)
@@ -39,22 +79,8 @@ function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filen
             gp_set = deserialize(f)
         end
     else 
-        # Train GPs on this system
-        gp_set = Dict()
-        # TODO: This is not hyperparameterized.
-        ls = 0.65
-        for (i, out_dim) in enumerate(keys(data_deps)) 
-            # Handle data dependency here
-            x_train_sub = x_train[:, findall(.>(0), data_deps[out_dim])[:]]
-            m_prior = MeanZero()
-            k_prior = SE(ls, 0.)
-            lnoise = log(sqrt(1+2/length(x_train_sub))) # Generalize to handle any bound
-            # opt_idx = StatsBase.sample(1:length(y_train[:,1]), params.data_params.data_num_optimize, replace = false)
-            # gp_pre = GP(x_train_sub[opt_idx, :]', y_train[opt_idx,i], m_prior, k_prior, lnoise) 
-            # optimize!(gp_pre)
-            gp = GP(x_train_sub', y_train[:,i], m_prior, k_prior, lnoise)
-            gp_set["x$i"] = deepcopy(gp)
-        end
+        x_train_sub = x_train #[:, findall(.>(0), data_deps[out_dim])[:]]
+        gp_set = train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=false, lnoise=nothing, opt_fraction=1.0)
     end
 
     gp_info_dict = Dict()
@@ -62,10 +88,24 @@ function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filen
         gp_info_dict[dim_key] = create_gp_info(params, gp_set, dim_key) 
     end
 
-    # TODO: Plotting should be exposed to get accurate timing
-    # create_plots ? plot_gp_fields(exp_dir, dyn_fn) : nothing
-
     return gp_set, gp_info_dict
+end
+
+"""
+Create Local GP From Global GP
+"""
+function create_local_gp_info_from_global(x_data, y_data, global_gp_info_dict)
+
+    local_gp_info_dict = copy(global_gp_info_dict) 
+
+    for (i, gp_key) in enumerate(keys(global_gp_info_dict))
+        gp = global_gp_info_dict[gp_key].gp
+        gp_local = update_gp_data(gp, x_data, y_data)
+        local_gp_info_dict[gp_key].gp = gp_local
+        update_gp_info(local_gp_info_dict[gp_key])
+    end
+
+    return local_gp_info_dict
 end
 
 """
@@ -75,7 +115,6 @@ function create_gp_info(params, gp_set, dim_key)
     gp = gp_set[dim_key]
 
     scale_factor = params.data_params.bound_type == "rkhs-tight" ? params.data_params.noise_sigma/sqrt(1. + 2. / gp.nobs) : 1.
-    # @info "Scale factor: $scale_factor"
     domain = params.domain
     diam_domain = 0.
     for dim_key in keys(domain)
@@ -86,13 +125,8 @@ function create_gp_info(params, gp_set, dim_key)
 
     # Calculating the RKHS parameter bounds
     RKHS_bound = abs(domain[dim_key][2] + params.system_params.lipschitz_bound*diam_domain)/ σ_inf
-    # @info "RKHS Norm Bound in $dim_key: ", RKHS_bound
-
-    # B = 1 + (params.data_params.noise_sigma)^(-2)
     B = 1 + (1 + 2/(gp.nobs))^(-1)
     γ = 0.5*gp.nobs*log(B)
-    # @info "Info gain term in $dim_key: ", γ
-
     K_inv = inv(gp.cK.mat + exp(gp.logNoise.value)^2*I)
     gp_info = GPInfo(gp, γ, RKHS_bound, params.data_params.bound_type, scale_factor, K_inv)
 
@@ -189,13 +223,21 @@ function save_gp_info(params, gp_set, gp_info_dict; save_global_gps=true, filena
 end
 
 """
-Update the GP with the datapoint given as an input-output tuple. 
+Update the GP with the specified dataset and return a new GP object
 """
-function update_gp(gp, datapoint::Tuple)
-    # Update the GP in place - does not return a new GP structure. 
-    newx = [gp.x'; datapoint[1][:]']'
-    newy = gp.y
-    push!(newy, datapoint[2])
+function update_gp_data(gp, x_data, y_data)
+    new_gp = deepcopy(gp)
+    GaussianProcesses.fit!(new_gp, x_data, y_data)
+    return new_gp
+end
+
+
+"""
+Update the GP by adding a single datapoint
+"""
+function add_datapoint_to_gp(gp::GPE, datapoint::Tuple)
+    newx = [gp.x datapoint[1]]
+    newy = [gp.y; datapoint[2]]
     GaussianProcesses.fit!(gp, newx, newy)
 end
 
