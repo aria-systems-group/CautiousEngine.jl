@@ -1,7 +1,7 @@
 """
 Plot the results from file using the legacy format.
 """
-function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, plot_gamma=false, extents_dict=nothing)
+function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, plot_gamma=false, extents_dict=nothing, filepath=nothing)
     region_data = BSON.load("$results_path/regions.bson")
     region_pairs = region_data[:pairs]
     extents = region_data[:extents]
@@ -98,6 +98,9 @@ function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, m
         plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
         [plot_cell_verify(extents[i], minPrs[i], maxPrs[i], min_threshold) for i in 1:num_regions]
         savefig(plt_min, "$results_path/$base_str-verification.png")
+        if !isnothing(filepath)
+            savefig(plt_min, "$filepath-verification.png")
+        end
 
         if !isnothing(trajectories)
             for trajectory in trajectories
@@ -117,6 +120,9 @@ function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, m
                 end
             end
             savefig(plt_min, "$results_path/$filename")
+            if !isnothing(filepath)
+                savefig(plt_min, "$filepath-sim.png")
+            end
         end
 
         if plot_gamma
