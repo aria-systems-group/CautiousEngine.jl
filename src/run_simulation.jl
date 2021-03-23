@@ -81,7 +81,7 @@ end
 function propogate_pimdp_trajectory(pimdp, dfa, extent_dict, x_new)
     new_extent = nothing
     for extent_id in keys(extent_dict)
-        extent_id == -11 ? continue : nothing
+        (extent_id == -11 || extent_id == length(keys(extent_dict))) ? continue : nothing
         extent = extent_dict[extent_id]
         if sum([extent[dim][1]<=x_new[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x_new)
             new_extent = extent_id 

@@ -57,3 +57,17 @@ function distance_from_accept_state(dfa, dfa_state)
 
     return dist
 end
+
+
+"""
+Given the current dfa state, return labels that will induce a positive transition
+"""
+function get_next_dfa_labels(dfa, dfa_state)
+    labels = []
+    for relation in dfa.transitions
+        if relation[1] == dfa_state &&  relation[1] != relation[3] && relation[3] != dfa.sink_state
+            push!(labels, relation[2])
+        end
+    end
+    return labels
+end

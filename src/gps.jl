@@ -42,7 +42,7 @@ function train_gp_1dim(x_train, y_train; se_params=[0., 0.65], optimize_hyperpar
     k_prior = SE(se_params[2], se_params[1])
 
     if isnothing(lnoise)
-        lnoise = log(sqrt(1+2/length(x_train))) # Generalize to handle any bound
+        lnoise = log(sqrt(1+2/size(x_train, 2))) # Generalize to handle any bound
     end
 
     if optimize_hyperparameters

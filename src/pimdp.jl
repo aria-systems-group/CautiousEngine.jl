@@ -206,3 +206,20 @@ function get_true_transition_probabilities(pmin, pmax, indSorted)
 
     return p
 end
+
+"""
+Get the PIMDP rows with the same IMDP state (non-sink/accept)
+"""
+function get_pimdp_row_idx_same_imdp(pimdp_state, dfa, num_actions, mode)
+    num_dfa_states = length(dfa.states)
+    imdp_idx = pimdp_state[1]
+    pimdp_row_idxs = []
+    for i=1:num_dfa_states
+        if i == dfa.sink_state || i == dfa.accepting_state
+            continue
+        end
+        push!(pimdp_row_idxs, map_pimdp_state_to_Pmat_row((imdp_idx, i), num_dfa_states, num_actions, mode))
+    end
+
+    return pimdp_row_idxs
+end
