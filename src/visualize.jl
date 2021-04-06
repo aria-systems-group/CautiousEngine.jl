@@ -303,7 +303,7 @@ function plot_gp_field_slice(results_path, dyn_fn, x3; nl_flag=false)
     # savefig(plt, "$results_path/data-hull.pdf")
 end
 
-function plot_synthesis_results(results_path, res_mat, imdp, dfa, pimdp; plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing)
+function plot_synthesis_results(results_path, res_mat, imdp, dfa, pimdp; plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, old_mins=nothing)
     region_data = BSON.load("$results_path/regions.bson")
     region_pairs = region_data[:pairs]
     extents = region_data[:extents]
@@ -447,6 +447,201 @@ function extent_dict_to_shape(extent)
     return Plots.Shape(x, y)
 end
 
+"""
+Plot the results from file using the legacy format.
+"""
+function plot_online_results(extents, res_mat, plots_basename, num_dfa_states; min_threshold=0.95, trajectories=nothing, trajectory_dict=nothing, extents_dict=nothing, online_data_dict=nothing)
+    # region_data = BSON.load("$results_path/regions.bson")
+    # extents = region_data[:extents]
+    num_regions = length(keys(extents)) - 1
+    X = extents[num_regions + 1]
+    minx = minimum(X["x1"])
+    maxx = maximum(X["x1"])
+    miny = minimum(X["x2"])
+    maxy = maximum(X["x2"])
+
+    # if plot_gp
+    #     files = readdir("$results_path/gps")
+    #     gp_file = filter(x->occursin(".bin", x), files)[1]
+    #     f = open("$results_path/gps/$gp_file")
+    #     gp_set = deserialize(f)
+    #     gp_x1 = gp_set["x1"]
+    #     close(f)
+    # end
+
+    # Plot the maximum results
+    maxPrs = res_mat[1:num_dfa_states:end,4]
+    minPrs = res_mat[1:num_dfa_states:end,3] 
+    min_minPr = minimum(minPrs)
+    min_maxPr = minimum(maxPrs)
+
+    function plot_cell(extent, prob_value, norm_val)
+        x = [extent["x1"][1], extent["x1"][1], extent["x1"][2], extent["x1"][2]]
+        y = [extent["x2"][1], extent["x2"][2], extent["x2"][2], extent["x2"][1]]
+        shape = Plots.Shape(x, y)
+        plot!(shape, color=:black, fillalpha=1-prob_value, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
+    end
+
+    plt_max = plot(#title="$k Step Maximum Safety",
+                    aspect_ratio=1,
+                    size=(300,300), dpi=300,
+                    xlims=[minx, maxx], ylims=[miny, maxy],
+                    #xlabel="X Units", ylabel="Y Units",
+                    xtickfont=font(10),
+                    ytickfont=font(10),
+                    titlefont=font(10),
+                    grid=false)
+    plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
+    [plot_cell(extents[i], maxPrs[i], min_maxPr) for i in 1:num_regions]
+    savefig(plt_max, "$plots_basename-max-heatmap.png")
+    # Plot the minimum results
+    plt_min = plot(#title=L"$k Step Minimum Safety",
+                    aspect_ratio=1,
+                    size=(300,300), dpi=300,
+                    xlims=[minx, maxx], ylims=[miny, maxy],
+                    #xlabel="X Units", ylabel="Y Units",
+                    xtickfont=font(10),
+                    ytickfont=font(10),
+                    titlefont=font(10),
+                    grid=false,
+                    backgroundcolor=128)
+    plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
+    [plot_cell(extents[i], minPrs[i], min_minPr) for i in 1:num_regions]
+
+    if !isnothing(extents_dict)
+        for key in keys(extents_dict)
+            for extent in extents_dict[key]
+                shape = extent_dict_to_shape(extent)
+                if key == "!a∧!b∧c"
+                    plot!(shape, color=:black, label="", fillalpha=1.0)
+                else
+                    plot!(shape, color=:black, label="", fillalpha=0.0) 
+                end
+            end
+        end
+    end
+
+    savefig(plt_min, "$plots_basename-min-heatmap.png")
+
+    plt_min = plot(#title=L"$k Step Minimum Safety",
+                    aspect_ratio=1,
+                    size=(300,300), dpi=300,
+                    xlims=[minx, maxx], ylims=[miny, maxy],
+                    #xlabel="X Units", ylabel="Y Units",
+                    xtickfont=font(10),
+                    ytickfont=font(10),
+                    titlefont=font(10),
+                    grid=false,
+                    backgroundcolor=128)
+
+    function plot_cell_verify(extent, min_prob_value, max_prob_value, threshold)
+        x = [extent["x1"][1], extent["x1"][1], extent["x1"][2], extent["x1"][2]]
+        y = [extent["x2"][1], extent["x2"][2], extent["x2"][2], extent["x2"][1]]
+        shape = Plots.Shape(x, y)
+
+        # if min_prob_value >= threshold
+        plot!(shape, color=:black, fillalpha=min_prob_value/2, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
+        # elseif max_prob_value < threshold
+            # plot!(shape, color=:purple, fillalpha=0.99, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
+        # else
+            # plot!(shape, color=:purple, fillalpha=0.50, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
+        # end
+    end
+    # Plot the cells
+    plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
+    [plot_cell_verify(extents[i], minPrs[i], maxPrs[i], min_threshold) for i in 1:num_regions]
+
+    # savefig(plt_min, "$plots_basename-verification.png")
+
+    if !isnothing(trajectories)
+        for trajectory in trajectories
+            if length(trajectory) > 1
+                [plot!([trajectory[i][1], trajectory[i+1][1]], [trajectory[i][2], trajectory[i+1][2]], color=:black, label="", linewith=2) for i=1:length(trajectory)-1]
+                scatter!([trajectory[end][1]], [trajectory[end][2]], color=:black, markershape=:star5, label="")
+            end
+        end
+
+        savefig(plt_min, "$plots_basename-online-sim.png")
+    end
+
+    if !isnothing(extents_dict)
+        for key in keys(extents_dict)
+            for extent in extents_dict[key]
+                shape = extent_dict_to_shape(extent)
+                if key == "!a∧!b∧c"
+                    plot!(shape, color=:black, label="", fillalpha=1.0)
+                else
+                    plot!(shape, color=:black, label="", fillalpha=0.0) 
+                end
+            end
+        end
+    end
+
+    if !isnothing(trajectory_dict)
+        for (jj, key) in enumerate(keys(trajectory_dict))
+            trajectories = trajectory_dict[key]
+            for trajectory in trajectories
+                if length(trajectory) > 1
+                    [plot!([trajectory[i][1], trajectory[i+1][1]], [trajectory[i][2], trajectory[i+1][2]],  color=jj, label="", linewith=2) for i=1:length(trajectory)-1]
+                    scatter!([trajectory[end][1]], [trajectory[end][2]], color=jj, markershape=:star5, label="")
+                end 
+            end
+            scatter!([trajectories[1][1][1]], [trajectories[1][1][2]], markershape=:circle, color=jj, label=key)
+        end
+        savefig(plt_min, "$plots_basename-online-sim-dict.png")
+    end
+
+    if !isnothing(online_data_dict) 
+        # Plot where the data was collected and a convex hull
+        x_data = []
+        for i=1:length(keys(online_data_dict))
+            for dp in online_data_dict[i]["x_online"]
+                push!(x_data, dp)
+            end
+        end
+        # data_shape = VPolygon(convex_hull(x_data))
+        # plot!(data_shape, fillalpha=0.25)
+        [scatter!([x_data[i][1]], [x_data[i][2]], label="", color=:black) for i=1:length(x_data)]
+        savefig(plt_min, "$plots_basename-online-data-hull.png")
+    end
+end
+
+function plot_extent_outlines(extents, extents_dict, plots_basename)
+
+        # region_data = BSON.load("$results_path/regions.bson")
+    # extents = region_data[:extents]
+    num_regions = length(keys(extents)) - 1
+    X = extents[num_regions + 1]
+    minx = minimum(X["x1"])
+    maxx = maximum(X["x1"])
+    miny = minimum(X["x2"])
+    maxy = maximum(X["x2"])
+
+    plt_min = plot(#title=L"$k Step Minimum Safety",
+                    aspect_ratio=1,
+                    size=(300,300), dpi=300,
+                    xlims=[minx, maxx], ylims=[miny, maxy],
+                    #xlabel="X Units", ylabel="Y Units",
+                    xtickfont=font(10),
+                    ytickfont=font(10),
+                    titlefont=font(10),
+                    grid=false,
+                    backgroundcolor=128)
+    plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], linewidth=2, label="")
+
+    for key in keys(extents_dict)
+        for extent in extents_dict[key]
+            shape = extent_dict_to_shape(extent)
+            if key == "!a∧!b∧c"
+                plot!(shape, color=:black, label="", fillalpha=1.0)
+            else
+                plot!(shape, color=:black, label="", fillalpha=0.0) 
+            end
+        end
+    end
+    savefig(plt_min, "$plots_basename-extent-dict.png")
+
+end
 # function plot_results_from_file_3d(results_path; plot_gp=false, min_threshold=0.95)
 #     region_data = BSON.load("$results_path/regions.bson")
 #     region_pairs = region_data[:pairs]
