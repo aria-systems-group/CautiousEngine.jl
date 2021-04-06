@@ -5,4 +5,5 @@ using Test
     # Write your tests here.
     include("gptests.jl")
     include("dfatests.jl")
+    include("systemtests.jl")
 end
