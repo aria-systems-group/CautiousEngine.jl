@@ -71,3 +71,28 @@ function get_next_dfa_labels(dfa, dfa_state)
     end
     return labels
 end
+
+"""
+Get all labels that transition to sink state
+"""
+function get_dfa_sink_labels(dfa)
+    labels = []
+    for relation in dfa.transitions
+        if relation[1] != relation[3] && relation[3] == dfa.sink_state
+            push!(labels, relation[2])
+        end
+    end
+    return labels
+end
+
+"""
+Check if current state can transition to accept state
+"""
+function possible_accept_transition(dfa, dfa_state, symbol)
+    for relation in dfa.transitions
+        if dfa_state == relation[1] && symbol == relation[2] && relation[3] == dfa.accepting_state
+            return true 
+        end
+    end
+    return false
+end

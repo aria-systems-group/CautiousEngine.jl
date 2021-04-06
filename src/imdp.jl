@@ -97,3 +97,20 @@ function write_imdp_to_file_bounded(imdp, Qyes, Qno, filename)
         end
     end
 end
+
+"""
+Get IMDP Ring states for a gridworld
+"""
+function get_imdp_ring_states(imdp_state_idx, num_stats_per_col, num_imdp_states; col_ordering=true)
+    # TODO: enfore column ordering 
+    ring_imdp_states = [imdp_state_idx + 1, imdp_state_idx - 1,
+                        imdp_state_idx - num_stats_per_col, imdp_state_idx - num_stats_per_col + 1, imdp_state_idx - num_stats_per_col - 1,
+                        imdp_state_idx + num_stats_per_col, imdp_state_idx + num_stats_per_col + 1, imdp_state_idx + num_stats_per_col - 1]
+
+   # To do: Better filter
+
+   # Remove the negative states 
+   ring_imdp_states = ring_imdp_states[ring_imdp_states .> 1]
+   ring_imdp_states = ring_imdp_states[ring_imdp_states .< num_imdp_states]
+   return ring_imdp_states
+end

@@ -223,3 +223,20 @@ function get_pimdp_row_idx_same_imdp(pimdp_state, dfa, num_actions, mode)
 
     return pimdp_row_idxs
 end
+
+"""
+Get the PIMDP states 1-ring around the input PIMDP state
+"""
+function get_pimdp_ring_states(pimdp_state)
+    # Given the imdp, get the ring states of the PIMDP
+    # For how ours is constucted, this is
+    imdp_state_idx = pimdp_state[1]
+
+    # TODO: pass in the # of imdp states per row
+    ring_imdp_states = get_imdp_ring_states(imdp_state_idx, 32, 1024)
+
+    pimdp_ring_states = [(state, pimdp_state[2]) for state in ring_imdp_states]
+
+    # ring_imdp_states = [imdp_state_idx + 1, imdp_state_idx - 1]
+    return pimdp_ring_states
+end
