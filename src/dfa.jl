@@ -58,6 +58,34 @@ function distance_from_accept_state(dfa, dfa_state)
     return dist
 end
 
+function create_dot_graph(dfa::DFA, filename::String)
+    open(filename, "w") do f
+        println(f, "digraph G {")
+        println(f, "  rankdir=LR\n  node [shape=\"circle\"]\n  fontname=\"Lato\"\n  node [fontname=\"Lato\"]\n  edge [fontname=\"Lato\"]")
+        println(f, "  size=\"8.2,8.2\" node[style=filled,fillcolor=\"#FDEDD3\"] edge[arrowhead=vee, arrowsize=.7]")
+
+        # Initial State
+        @printf(f, "  I [label=\"\", style=invis, width=0]\n  I -> %d\n", dfa.initial_state)
+
+        for state in dfa.states
+            if state == dfa.accepting_state
+                @printf(f, "  %d [shape=\"doublecircle\", label=<z<SUB>%d</SUB>>]\n", state, state)
+                @printf(f, "  %d -> %d [label=<true>]\n", state, state)
+            else
+                @printf(f, "  %d [label=<z<SUB>%d</SUB>>]\n", state, state)
+                for transition in dfa.transitions
+                    if transition[1] == state
+                        # Assume 1 label for now
+                        @printf(f, "  %d -> %d [label=<%s>]\n", state, transition[3], transition[2])
+                    end
+                end
+
+            end
+
+        end
+        println(f, "}")
+    end
+end
 
 """
 Given the current dfa state, return labels that will induce a positive transition

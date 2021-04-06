@@ -98,6 +98,31 @@ function write_imdp_to_file_bounded(imdp, Qyes, Qno, filename)
     end
 end
 
+function create_dot_graph(imdp::IMDP, filename::String)
+    open(filename, "w") do f
+        println(f, "digraph G {")
+        println(f, "  rankdir=LR\n  node [shape=\"circle\"]\n  fontname=\"Lato\"\n  node [fontname=\"Lato\"]\n  edge [fontname=\"Lato\"]")
+        println(f, "  size=\"8.2,8.2\" node[style=filled,fillcolor=\"#FDEDD3\"] edge[arrowhead=vee, arrowsize=.7]")
+
+        # Initial State
+        @printf(f, "  I [label=\"\", style=invis, width=0]\n  I -> %d\n", imdp.initial_state)
+
+        for state in imdp.states
+            @printf(f, "  %d [label=<q<SUB>%d</SUB>>, xlabel=<%s>]\n", state, state, imdp.labels[state])
+            
+            for action in imdp.actions
+                row_idx = (state-1)*length(imdp.actions) + action
+
+                for idx in findall(>(0.), maximum.(imdp.Pbounds[row_idx, :]))
+                    state_p = idx
+                    @printf(f, "  %d -> %d [label=<a<SUB>%d</SUB>: %.1f-%.1f >]\n", state, state_p, action, minimum(imdp.Pbounds[row_idx,state_p]), maximum(imdp.Pbounds[row_idx,state_p]))
+                end
+            end
+        end
+        println(f, "}")
+    end
+end
+
 """
 Get IMDP Ring states for a gridworld
 """

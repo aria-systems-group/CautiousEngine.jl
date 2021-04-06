@@ -30,7 +30,6 @@ include("error_bounds.jl")
 include("discretization.jl")
 include("data.jl")
 include("verification.jl")
-include("create_dot_graphs.jl")
 include("imdp.jl")
 include("dfa.jl")
 include("pimdp.jl")
@@ -82,6 +81,19 @@ export SystemParameters, DataParameters, ExperimentParameters
 export perform_synthesis_from_result_dirs, generate_transition_bounds, generate_linear_truth, verify_experiment, generate_result_dir_name
 
 export plot_results_from_file, plot_gp_field_slice
+
+"""
+Wrapper function for unpacking the experiment parameters.
+"""
+function generate_training_data(params::ExperimentParameters)
+   
+    x_train, y_train = generate_training_data(params.system_params.unknown_dynamics_fcn, params.domain, params.data_params.data_num,
+                                              known_fn=params.system_params.known_dynamics_fcn, random_seed=params.random_seed, 
+                                              n_dims_out=params.system_params.n_dims_out, process_dist=params.system_params.process_noise_dist, 
+                                              measurement_dist=params.system_params.measurement_noise_dist)
+
+    return x_train, y_train
+end
 
 # TODO: Fix this function
 function generate_linear_truth(params, system_matrix; single_mode_verification=false)

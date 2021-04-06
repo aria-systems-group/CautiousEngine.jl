@@ -1,42 +1,53 @@
-# Currently a placeholder that will hold data-generation related code.
+# Contains functions for generating synthetic training data
 
-function generate_training_data(params)
-    if !isnothing(params.system_params.known_dynamics_fcn)
-        f_sub = (x) -> params.system_params.unknown_dynamics_fcn(x) + params.system_params.known_dynamics_fcn(x)
+"""
+Generates synthetic data from an unknown function by uniformly sampling datapoints over the domain. Returns the input and output points. 
+
+    Note that you cannot use the `measurement_dist` and `known_fn` together.
+
+# Arguments 
+- `unknown_fn`: the handle of the unknown function.
+- `domain::Dict`: the dictionary indicating the state space domain with keys `"x1","x2"...` and corresponding min-max bounds.
+- `data_num::Int`: the number of datapoints to generate.
+- `known_fn=nothing`: the known part of the function.
+- `random_seed::Int=11`: random seed for the uniform sample (and noise processes, if any).
+- `n_dims_out::Int=-1`: dimension of the output of the function, defaults to same dimension as input.
+- `process_dist=nothing`: process noise distristribution.
+- `measurement_dist=nothing`: measurement noise distristribution.
+"""
+function generate_training_data(unknown_fn, domain::Dict, data_num::Int; 
+                                known_fn=nothing, random_seed::Int=11, n_dims_out::Int=-1, process_dist=nothing, measurement_dist=nothing)
+
+    if !isnothing(known_fn)
+        f_sub = (x) -> unknown_fn(x) + known_fn(x)
     else 
-        f_sub = (x) -> params.system_params.unknown_dynamics_fcn(x)
+        f_sub = (x) -> unknown_fn(x)
     end
 
-    domain = params.domain
-    m = params.data_params.data_num
-    noise_sigma = params.data_params.noise_sigma
-    n_dims_in = params.system_params.n_dims_in 
-    n_dims_out = params.system_params.n_dims_out 
-    mt = MersenneTwister(params.random_seed)
+    n_dims_in = length(domain)
+    n_dims_out = n_dims_out > 0 ? n_dims_out : n_dims_in 
+    mt = MersenneTwister(random_seed)
 
-    # x_train = hcat([rand(mt, Uniform(domain["x$i"][1], domain["x$i"][2]), m) for i=1:n_dims_in]...)
-    x_train = vcat([rand(mt, Uniform(domain["x$i"][1], domain["x$i"][2]), 1, m) for i=1:n_dims_in]...)
-    @info x_train
+    x_train = vcat([rand(mt, Uniform(domain["x$i"][1], domain["x$i"][2]), 1, data_num) for i=1:n_dims_in]...)
     y_train = mapslices(f_sub, x_train, dims=1) 
    
     # Account for process noise...
-    if !isnothing(params.system_params.process_noise_dist)
-        # y_train += rand(mt, params.system_params.process_noise_dist, (m,n_dims_out)) 
-        y_train += rand(mt, params.system_params.process_noise_dist, (n_dims_out, m)) 
+    if !isnothing(process_dist)
+        y_train += rand(mt, process_dist, (n_dims_out, data_num)) 
     end
 
     # Account for measurement noise...
-    if !isnothing(params.system_params.measurement_noise_dist)
-        y_train += rand(mt, params.system_params.measurement_noise_dist, (n_dims_out, m)) 
+    if !isnothing(measurement_dist)
+        y_train += rand(mt, measurement_dist, (n_dims_out, data_num)) 
     end
 
     # Account for the known part, if any...
-    # TODO: I don't think we actually need this part.
-    if !isnothing(params.system_params.known_dynamics_fcn)
-        y_train = y_train - mapslices(params.system_params.known_dynamics_fcn, x_train, dims=1)
+    if !isnothing(known_fn)
+        y_train = y_train - mapslices(known_fn, x_train, dims=1)
     end
 
     @assert size(x_train, 2) == size(y_train, 2)
 
     return x_train, y_train
 end
+

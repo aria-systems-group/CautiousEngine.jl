@@ -130,6 +130,37 @@ function write_pimdp_to_file(pimdp, filename)
     end
 end
 
+function create_dot_graph(pimdp::PIMDP, filename::String)
+    open(filename, "w") do f
+        println(f, "digraph G {")
+        println(f, "  rankdir=LR\n  node [shape=\"circle\"]\n  fontname=\"Lato\"\n  node [fontname=\"Lato\"]\n  edge [fontname=\"Lato\"]")
+        println(f, "  size=\"8.2,8.2\" node[style=filled,fillcolor=\"#FDEDD3\"] edge[arrowhead=vee, arrowsize=.7]")
+
+        # Initial State
+        # TODO: Don't hardcode intial state
+        @printf(f, "  I [label=\"\", style=invis, width=0]\n  I -> %d\n", 1)
+
+        i = 1
+        for state in pimdp.states
+            @printf(f, "  %d [label=<(s<SUB>%d</SUB>,q<SUB>%d</SUB>)>, xlabel=<%d>]\n", i, state[1], state[2], pimdp.accepting_labels[(state[1]-1)*3 + state[2]])
+            
+            for action in pimdp.actions
+                q_size = 3
+                row_idx = (state[1]-1)*length(pimdp.actions)*q_size + (state[2]-1)*length(pimdp.actions) + action
+
+                for idx in findall(>(0.), maximum.(pimdp.Pbounds[row_idx, :]))
+                    state_p = pimdp.states[idx]
+                    col_idx = (state_p[1]-1)*q_size + state_p[2]
+                    # TODO: fix the second index to be correct
+                    @printf(f, "  %d -> %d [label=<a<SUB>%d</SUB>: %.1f-%.1f >]\n", i, idx, action, minimum(pimdp.Pbounds[row_idx,col_idx]), maximum(pimdp.Pbounds[row_idx,col_idx]))
+                end
+            end
+            i+=1
+        end
+        println(f, "}")
+    end
+end
+
 """
 Read a PIMDP from file.
 """
