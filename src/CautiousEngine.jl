@@ -249,27 +249,16 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
     plot_graphs ? create_graph_from_pimdp(pimdp, "$dst_dir/pimdp.gv") : nothing
 
     pimdp_filename = "$dst_dir/pimdp.txt"
-    write_pimdp_to_file(pimdp, pimdp_filename)
-
-    @info "Synthesizing a controller... (maximize pessimistic)"
-    res_mat = run_unbounded_imdp_synthesis(pimdp_filename)
-
-    @info "Synthesizing a controller... (maximize optimistic)"
-    res_mat_opt = run_imdp_synthesis(pimdp_filename, -1, mode2="optimistic", save_mats=false)
-
-    if add_opt
-        for j in 1:length(res_mat[:,1])
-            if res_mat[j, 3] == res_mat_opt[j,3] && res_mat_opt[j,4] > res_mat[j,4] 
-                res_mat[j, 2] = res_mat_opt[j,2]
-                res_mat[j, 4] = res_mat_opt[j,4] 
-            end
-        end
-    end
+    res_mat = run_pimdp_synthesis(pimdp, pimdp_filename, add_opt=add_opt)
 
     # Copy region data
     sys_dir = res_dirs[1]
     cp("$sys_dir/regions.bson", "$dst_dir/regions.bson", force=true)
-    plot_gamma_value(dst_dir, res_mat, res_mat_opt, num_dfa_states=length(dfa.states))
+
+    # TODO Plot gamma values somewhere else, i.e. not here
+    # if add_opt
+    #     plot_gamma_value(dst_dir, res_mat, res_mat_opt, num_dfa_states=length(dfa.states))
+    # end
     save_legacy_mats(res_mat, dst_dir, -1)
     
     # plot_results_from_file(dst_dir)
@@ -301,6 +290,31 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
 
     return res_mat, dst_dir, pimdp
     # Plot Results
+end
+
+"""
+Run the PIMDP synthesis
+"""
+function run_pimdp_synthesis(pimdp::PIMDP, pimdp_filename::String; add_opt=false)
+    write_pimdp_to_file(pimdp, pimdp_filename)
+
+    @info "Synthesizing a controller... (maximize pessimistic)"
+    res_mat = run_unbounded_imdp_synthesis(pimdp_filename)
+
+    if add_opt
+        @info "Synthesizing a controller... (maximize optimistic)"
+        basename = pimdp_filename[1:end-3]
+        opt_pimdp_filename = "$basename-optimistic.txt"
+        res_mat_opt = run_imdp_synthesis(pimdp_filename, -1, mode2="optimistic", save_mats=false)
+        for j in 1:length(res_mat[:,1])
+            if res_mat[j, 3] == res_mat_opt[j,3] && res_mat_opt[j,4] > res_mat[j,4] 
+                res_mat[j, 2] = res_mat_opt[j,2]
+                res_mat[j, 4] = res_mat_opt[j,4] 
+            end
+        end
+    end
+
+    return res_mat
 end
 
 "
@@ -421,9 +435,16 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
                 lb = [extent[dim_key][1] for dim_key in dim_keys]
                 ub = [extent[dim_key][2] for dim_key in dim_keys]
                 # Assume 2D
-                center = [mean(lb) mean(ub)]
-                radius = params.data_params.local_radius
-                x_sub, y_sub = get_points_in_neighborhood(center, radius, x_train, y_train)
+                center = [mean(lb), mean(ub)]
+               
+                kdtree = KDTree(x_train);
+                
+                num_neighbors = 60;
+                sub_idx, _ = knn(kdtree, center, num_neighbors, true)
+                
+                x_sub = @view x_train[:, sub_idx]
+                y_sub = @view y_train[:, sub_idx]
+
                 gp_set, gp_info_dict = generate_estimates(params, x_sub, y_sub, filename_appendix=i) 
                 save_gp_info(params, gp_set, gp_info_dict, save_global_gps=false, filename_appendix=i)
                 region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))

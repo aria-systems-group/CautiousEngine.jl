@@ -100,6 +100,26 @@ function propogate_pimdp_trajectory(pimdp, dfa, extent_dict, x_new)
 end
 
 """
+Get IMDP State ID from system state
+"""
+function get_imdp_state_id(extent_dict, x_new)
+    new_extent = nothing
+    for extent_id in keys(extent_dict)
+        (extent_id == -11 || extent_id == length(keys(extent_dict))) ? continue : nothing
+        extent = extent_dict[extent_id]
+        if sum([extent[dim][1]<=x_new[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x_new)
+            new_extent = extent_id 
+            break
+        end
+    end
+
+    if isnothing(new_extent)
+        new_extent = length(keys(extent_dict))
+    end
+    return new_extent
+end
+
+"""
 Test PIMDP Propogation without saving
 """
 function propogate_pimdp_trajectory_test(pimdp, dfa, extent_dict, x_new)
@@ -120,16 +140,17 @@ function propogate_pimdp_trajectory_test(pimdp, dfa, extent_dict, x_new)
         qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[new_extent])
     end
 
-    reward = 0.
-    if qnew == dfa.sink_state
-        reward = -Inf
-    elseif qnew == dfa.accepting_state
-        reward = Inf
-    elseif qnew > pimdp.state_history[end][2]
-        reward = 1000
-    end
+    # reward = 0.
+    # if qnew == dfa.sink_state
+    #     reward = -Inf
+    # elseif qnew == dfa.accepting_state
+    #     reward = Inf
+    # elseif qnew > pimdp.state_history[end][2]
+    #     reward = 1000
+    # end
     
-    return reward
+    # return reward
+    return (new_extent, qnew)
 end
 
 """
@@ -167,8 +188,6 @@ end
 """
 Reward based on smallest distance to accept state in PIMDP
 """
-
-
 function reset_pimdp(x0, imdp, dfa, pimdp, extent_dict, policy)
     init_extent = nothing
     for extent_id in keys(extent_dict)
