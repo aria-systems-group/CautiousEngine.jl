@@ -40,7 +40,6 @@ include("run_simulation.jl")
 include("offline.jl")
 include("online_control.jl")
 include("gps.jl")
-include("synthesis.jl")
 
 struct SystemParameters
     mode_tag::String
