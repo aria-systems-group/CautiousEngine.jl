@@ -12,7 +12,7 @@ using IntervalSets
 """
 Create an IMDP from a list of result directories.
 """
-function create_imdp_from_result_dirs(res_dirs, exp_dir)
+function create_imdp_from_result_dirs(res_dirs, exp_dir; label_fn=nothing)
     sys_dir, minPr, maxPr = create_switched_system(res_dirs, exp_dir)
     N, M = size(minPr)
     Pbounds = hcat([[minPr[i, j]..maxPr[i,j] for i=1:N] for j=1:M]...)
@@ -21,6 +21,9 @@ function create_imdp_from_result_dirs(res_dirs, exp_dir)
     @debug "Actions: " A
     labels = Dict()
     imdp = IMDP(Q, A, Pbounds, labels, nothing, 1)
+    if !isnothing(label_fn)
+        create_imdp_labels(label_fn, imdp, "$exp_dir/switched-system/regions.bson")
+    end
     return imdp
 end
 
