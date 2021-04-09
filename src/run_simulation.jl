@@ -1,13 +1,11 @@
-function simulate_system(x0, modes, steps, imdp, pimdp, dfa, extents, policy; noise_dist=nothing)
+function simulate_system(x0, modes, steps, imdp, pimdp, dfa, extents, policy)
+    x0 = reshape(x0, length(x0), 1)
     reset_pimdp(x0, imdp, dfa, pimdp, extents, policy)
     for i=1:steps
         check_pimdp_exit_conditions(pimdp) ? break : nothing
         x_c = pimdp.trajectory[end]
         mode = pimdp.policy[map_pimdp_state_to_index(pimdp, pimdp.state_history[end])]
         x_n = modes[Int(mode)](x_c)
-        if !isnothing(noise_dist)
-            x_n += rand(noise_dist, size(x_n))
-        end
         propogate_pimdp_trajectory(pimdp, dfa, extents, x_n)
     end
     return 

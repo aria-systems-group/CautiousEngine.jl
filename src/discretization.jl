@@ -57,23 +57,3 @@ function discretize_set_lazy(set, epsilon)
     end
     return discrete_sets, discrete_extents
 end
-
-" Expands or shrinks a rectangle according to parameter epsilon.
-# Arguments
-- `rect::Dict` - Dictionary containing shape to expand or shrink
-- `epsilon::Float64` - Size of the expansion or shrinkage
-"
-function margin_rectangle(rect, epsilon)
-    x = rect["x1"]
-    y = rect["x2"]
-
-    new_x_min = minimum(x) + epsilon   
-    new_x_max = maximum(x) - epsilon
-    new_y_min = minimum(y) + epsilon
-    new_y_max = maximum(y) - epsilon
-
-    # TODO: Remove the redunant points
-    margined_rectangle = Dict("x1" => [new_x_min, new_x_min, new_x_max, new_x_max],
-                              "x2" => [new_y_min, new_y_max, new_y_max, new_y_min])
-    return margined_rectangle
-end
