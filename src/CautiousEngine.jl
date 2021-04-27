@@ -24,7 +24,9 @@ using Plots
 using LazySets
 
 # My own packages
-using GPBounding
+include("GPBounding.jl")
+using .GPBounding
+
 include("transitions.jl")
 include("error_bounds.jl")
 include("discretization.jl")
