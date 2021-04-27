@@ -12,9 +12,14 @@ A good location for packages under development is `~/.julia/dev`.
 
 Next, use the following commands to activate the project environment and then instantiate the project and install dependencies: 
 
-`pkg"activate path/to/CautiousEngine.jl` then `pkg"instantiate`.
+`pkg"activate path/to/CautiousEngine.jl"` then `pkg"instantiate"`.
 
 This will install all the required packages.
+
+### BMDP Tool
+This package depends on the `bmdp-tool` here: https://github.com/aria-systems-group/bmdp-tool
+
+The tool should be compiled using Make and the `synthesis` executable moved to a location on the user executable path e.g. `/usr/local/bin`. CautiousEngine does not use the included MATLAB tools.
 
 ## Usage
 Full documentation is in progress, but here are some notes to get started.
