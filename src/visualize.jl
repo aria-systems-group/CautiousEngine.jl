@@ -182,14 +182,14 @@ function plot_gp_fields(results_path, dyn_fn)
     files = readdir("$results_path/gps")
     gp_file = filter(x->occursin(".bin", x), files)[1]
     f = open("$results_path/gps/$gp_file")
-    gp_set = deserialize(f)
+    gp_save_info = deserialize(f)
     close(f)
     region_data = BSON.load("$results_path/regions.bson")
 
-    if length(gp_set) == 1
+    if length(gp_save_info) == 1
         plot_gp_1d(gp_set, region_data, results_path, dyn_fn)
         return
-    elseif length(gp_set) > 2
+    elseif length(gp_save_info) > 2
         plot_gp_field_slice(results_path, dyn_fn, 0.0; nl_flag=false) 
         return
     end
@@ -204,15 +204,15 @@ function plot_gp_fields(results_path, dyn_fn)
     x_range = minx:0.25:maxx
     y_range = miny:0.25:maxy
     meshgrid(x, y) = (repeat(x, outer=length(y)), repeat(y, inner=length(x)))
-    y, x = meshgrid(x_range, y_range)
-    gp_x1 = gp_set["x1"]
-    gp_x2 = gp_set["x2"]
+    x, y = meshgrid(x_range, y_range)
+    gp_x1 = gp_save_info[:gp_set]["x1"]
+    gp_x2 = gp_save_info[:gp_set]["x2"]
     delta_x_gp = [x[i] - predict_y(gp_x1, hcat([x[i], y[i]]))[1][1] for i in 1:length(x)]
     delta_y_gp = [y[i] - predict_y(gp_x2, hcat([x[i], y[i]]))[1][1] for i in 1:length(x)]
     u_gp = delta_x_gp*0.5
     v_gp = delta_y_gp*0.5
     plt1 = plot(size=(300,300), dpi=600, aspect_ratio=1, grid=false, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], xtickfont=font(10), ytickfont=font(10), titlefont=font(10))
-    plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
+    plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="", linealpha=0.1)
     quiver!(x, y, quiver=(-u_gp, -v_gp), color=:black, linewidth=1.5)
     plt2 = plot(size=(300,300), dpi=600, aspect_ratio=1, grid=false, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], xtickfont=font(10), ytickfont=font(10), titlefont=font(10))
     plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="", linealpha=0.1)
