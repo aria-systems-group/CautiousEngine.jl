@@ -316,26 +316,26 @@ function generate_region_images(params, gp_info_dict::Dict; reuse_regions_flag=f
         domain = params.domain
         min_ex = [domain[dim_key][1] for dim_key in keys(domain)]
         max_ex = [domain[dim_key][2] for dim_key in keys(domain)]
-
-        # σ_U_ubs = []
-        # for dim_key in keys(domain)
-        #     _, σ_U_lb, σ_U_ub = compute_σ_ub_bounds_auto(gp_info_dict[dim_key].gp, min_ex, max_ex) 
-        #     push!(σ_U_ubs, σ_U_ub)
-        # end
-        # The last state!!
-        # σ_bound_dict[num_regions] = σ_U_ubs 
-
-        #Try to parallelize this loop.
-
+       
         # Store the predicted mean and covariance for each sampled point 
         dim_keys = keys(domain)
-        for i=1:num_regions-1
-            @info "Bounding region $i/$num_regions"
-            extent = region_dict[i]
-            lb = [extent[dim_key][1] for dim_key in dim_keys]
-            ub = [extent[dim_key][2] for dim_key in dim_keys]
-            region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))
-        end  # End threaded forloop
+        if Threads.nthreads() > 1
+            Threads.@threads for i=1:num_regions-1
+                # @info "Bounding region $i/$num_regions"
+                extent = region_dict[i]
+                lb = [extent[dim_key][1] for dim_key in dim_keys]
+                ub = [extent[dim_key][2] for dim_key in dim_keys]
+                region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))
+            end
+        else
+            for i=1:num_regions-1
+                @info "Bounding region $i/$num_regions"
+                extent = region_dict[i]
+                lb = [extent[dim_key][1] for dim_key in dim_keys]
+                ub = [extent[dim_key][2] for dim_key in dim_keys]
+                region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))
+            end
+        end
 
         region_data = Dict()
         region_data[:pairs] = region_pairs
@@ -369,9 +369,8 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
 
         # Store the predicted mean and covariance for each sampled point 
         dim_keys = keys(domain)
-        for i=1:num_regions
+        Threads.@threads for i=1:num_regions
             # Get subset of data here
-            @info "Bounding region $i/$num_regions"
             if i == num_regions
                 extent = region_dict[-11]
                 lb = [extent[dim_key][1] for dim_key in dim_keys]
