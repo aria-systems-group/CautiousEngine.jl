@@ -55,8 +55,8 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
     else    
     x0 = 4*rand(mt,2,1)[:]-[2.; 2.]
     end
-    res = BSON.load(regions_file)
-    simulate_system(x0, modes, 100, imdp, pimdp, dfa, res[:extents], res_mat[:,2])
+    extents, _ = deserialize_region_data(regions_file)
+    simulate_system(x0, modes, 100, imdp, pimdp, dfa, extents, res_mat[:,2])
     push!(trajectories, copy(pimdp.trajectory))
     end
     plot_synthesis_results(dst_dir, res_mat, imdp, dfa, pimdp, trajectories=trajectories, filename="sim.png")

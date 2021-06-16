@@ -63,7 +63,7 @@ for (i, mode) in enumerate(unknown_mode_list)
 
     # Setup experiment parameter structures (defined in CautiousEngine.jl)
     system_params = SystemParameters(system, mode, known_part, measurement_noise_dist, process_noise_dist, Lf_bound, dependency_dims, 2, 2)
-    data_params = DataParameters(number_of_datapoints, m_opt, bound_type, σ_proc, epsilon, eta, safety_dims, -1.)
+    data_params = DataParameters(number_of_datapoints, m_opt, bound_type, σ_proc, epsilon, eta, safety_dims, -1., -1.)
     experiment_params = ExperimentParameters(exp_dir, experiment_type, specification_file, X, grid_sizes, "foo", random_seed, system_params, data_params)
 
     # If constructing the single-mode systems, run it! 
