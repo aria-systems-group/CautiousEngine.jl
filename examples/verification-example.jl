@@ -39,7 +39,7 @@ safety_dims = ["x1", "x2"]                          # Dimensions that have safet
 dependency_dims = Dict("x1" => [1, 1],              # Defines dependencies on other states  
                        "x2" => [1, 1])
 number_of_datapoints = 100                          # Number of data points per mode to generate
-run_exps_flag = false                                # Set to true to rerun the single-mode constructions 
+run_exps_flag = true                                # Set to true to rerun the single-mode constructions 
 m_opt = -1                                          # Unused
 bound_type = "rkhs-tight"                           # GP bound type 
 epsilon = -1.                                       # Distance bound parameter, set to -1 for automatic determination
@@ -54,7 +54,7 @@ for (i, mode) in enumerate(unknown_mode_list)
 
     # Setup experiment parameter structures (defined in CautiousEngine.jl)
     system_params = SystemParameters(system, mode, known_part, measurement_noise_dist, process_noise_dist, Lf_bound, dependency_dims, 2, 2)
-    data_params = DataParameters(number_of_datapoints, m_opt, bound_type, σ_proc, epsilon, eta, safety_dims, -1.)
+    data_params = DataParameters(number_of_datapoints, m_opt, bound_type, σ_proc, epsilon, eta, safety_dims, -1., -1.)
     experiment_params = ExperimentParameters(exp_dir, experiment_type, specification_file, X, grid_sizes, "foo", random_seed, system_params, data_params)
 
     # If constructing the single-mode systems, run it! 

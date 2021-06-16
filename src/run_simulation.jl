@@ -79,7 +79,7 @@ end
 function propogate_pimdp_trajectory(pimdp, dfa, extent_dict, x_new)
     new_extent = nothing
     for extent_id in keys(extent_dict)
-        (extent_id == -11 || extent_id == length(keys(extent_dict))) ? continue : nothing
+        extent_id == extent_dict.count ? continue : nothing
         extent = extent_dict[extent_id]
         if sum([extent[dim][1]<=x_new[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x_new)
             new_extent = extent_id 
@@ -103,7 +103,7 @@ Get IMDP State ID from system state
 function get_imdp_state_id(extent_dict, x_new)
     new_extent = nothing
     for extent_id in keys(extent_dict)
-        (extent_id == -11 || extent_id == length(keys(extent_dict))) ? continue : nothing
+        extent_id == extent_dict.count ? continue : nothing
         extent = extent_dict[extent_id]
         if sum([extent[dim][1]<=x_new[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x_new)
             new_extent = extent_id 
@@ -123,7 +123,7 @@ Test PIMDP Propogation without saving
 function propogate_pimdp_trajectory_test(pimdp, dfa, extent_dict, x_new)
     new_extent = nothing
     for extent_id in keys(extent_dict)
-        extent_id == -11 ? continue : nothing
+        extent_id == extent_dict.count ? continue : nothing
         extent = extent_dict[extent_id]
         if sum([extent[dim][1]<=x_new[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x_new)
             new_extent = extent_id 
@@ -189,7 +189,7 @@ Reward based on smallest distance to accept state in PIMDP
 function reset_pimdp(x0, imdp, dfa, pimdp, extent_dict, policy)
     init_extent = nothing
     for extent_id in keys(extent_dict)
-        extent_id == -11 ? continue : nothing
+        extent_id == extent_dict.count ? continue : nothing
         extent = extent_dict[extent_id]
         if sum([extent[dim][1]<=x0[i]<=extent[dim][2] for (i, dim) in enumerate(keys(extent))]) == length(x0)
             init_extent = extent_id 

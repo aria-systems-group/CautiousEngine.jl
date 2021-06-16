@@ -45,16 +45,15 @@ function create_simple_imdp(minPr, maxPr)
 end
 
 function create_imdp_labels(labels_fn, imdp, extent_file::String)
-    res = BSON.load(extent_file)
-    imdp_state_extents = res[:extents]
-    create_imdp_labels(labels_fn, imdp, imdp_state_extents)
+    extents, _ = deserialize_region_data(extent_file) 
+    create_imdp_labels(labels_fn, imdp, extents)
 end
 
 function create_imdp_labels(labels_fn, imdp, imdp_state_extents::Dict)
     for state_key in keys(imdp_state_extents)
         state = imdp_state_extents[state_key]
-        if state_key == -11 || state_key == length(keys(imdp_state_extents))
-            imdp.labels[length(imdp_state_extents)] = labels_fn(state, unsafe=true) 
+        if state_key == imdp_state_extents.count
+            imdp.labels[state_key] = labels_fn(state, unsafe=true) 
         else
             imdp.labels[state_key] = labels_fn(state)
         end

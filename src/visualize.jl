@@ -2,11 +2,9 @@
 Plot the results from file using the legacy format.
 """
 function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, plot_gamma=false, extents_dict=nothing, filepath=nothing)
-    region_data = BSON.load("$results_path/regions.bson")
-    region_pairs = region_data[:pairs]
-    extents = region_data[:extents]
+    extents, post_extents = deserialize_region_data("$results_path/regions.bson")
     num_regions = length(keys(extents)) - 1
-    X = extents[-11]
+    X = extents[extents.count]
     minx = minimum(X["x1"])
     maxx = maximum(X["x1"])
     miny = minimum(X["x2"])
@@ -149,11 +147,9 @@ function plot_gamma_value(results_path, min_ResMat, max_ResMat; num_dfa_states=1
         plot!(shape, color=:black, fillalpha=1-prob_value, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
     end
 
-    region_data = BSON.load("$results_path/regions.bson")
-    region_pairs = region_data[:pairs]
-    extents = region_data[:extents]
+    extents, post_extents = deserialize_region_data("$results_path/regions.bson") 
     num_regions = length(keys(extents)) - 1
-    X = extents[-11]
+    X = extents[extents.count]
     minx = minimum(X["x1"])
     maxx = maximum(X["x1"])
     miny = minimum(X["x2"])
@@ -184,7 +180,7 @@ function plot_gp_fields(results_path, dyn_fn)
     f = open("$results_path/gps/$gp_file")
     gp_save_info = deserialize(f)
     close(f)
-    region_data = BSON.load("$results_path/regions.bson")
+    extents, post_extents = deserialize_region_data("$results_path/regions.bson")
 
     if length(gp_save_info) == 1
         plot_gp_1d(gp_set, region_data, results_path, dyn_fn)
@@ -194,8 +190,7 @@ function plot_gp_fields(results_path, dyn_fn)
         return
     end
 
-    extents = region_data[:extents]
-    X = extents[-11]
+    X = extents[extents.count]
     minx = minimum(X["x1"])
     maxx = maximum(X["x1"])
     miny = minimum(X["x2"])
@@ -238,7 +233,7 @@ end
 
 function plot_gp_1d(gp_set, region_data, results_path, dyn_fn)
     extents = region_data[:extents]
-    X = extents[-11]
+    X = extents[extents.count]
     minx = minimum(X["x1"])
     maxx = maximum(X["x1"])
     x = collect(minx:0.25:maxx)
@@ -260,9 +255,8 @@ function plot_gp_field_slice(results_path, dyn_fn, x3; nl_flag=false)
     #A = [0.9 0.4; -0.4 0.5] # Rotation
     #gp_dict = gp_set[A_mats[1]]
 
-    region_data = BSON.load("$results_path/regions.bson")
-    extents = region_data[:extents]
-    X = extents[-11]
+    extents, post_extents = deserialize_region_data("$results_path/regions.bson")
+    X = extents[extents.count]
     minx = minimum(X["x1"])
     maxx = maximum(X["x1"])
     miny = minimum(X["x2"])
@@ -304,11 +298,9 @@ function plot_gp_field_slice(results_path, dyn_fn, x3; nl_flag=false)
 end
 
 function plot_synthesis_results(results_path, res_mat, imdp, dfa, pimdp; plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, old_mins=nothing)
-    region_data = BSON.load("$results_path/regions.bson")
-    region_pairs = region_data[:pairs]
-    extents = region_data[:extents]
+    extents, post_extents = deserialize_region_data("$results_path/regions.bson")
     num_regions = length(keys(extents)) - 1
-    X = extents[-11]
+    X = extents[extents.count]
 
     if length(keys(X)) == 2
         plot_results_from_file(results_path, num_dfa_states=length(dfa.states), trajectories=trajectories, filename=filename)
@@ -451,8 +443,6 @@ end
 Plot the results from file using the legacy format.
 """
 function plot_online_results(extents, res_mat, plots_basename, num_dfa_states; min_threshold=0.95, trajectories=nothing, trajectory_dict=nothing, extents_dict=nothing, online_data_dict=nothing)
-    # region_data = BSON.load("$results_path/regions.bson")
-    # extents = region_data[:extents]
     num_regions = length(keys(extents)) - 1
     X = extents[num_regions + 1]
     minx = minimum(X["x1"])
@@ -607,9 +597,6 @@ function plot_online_results(extents, res_mat, plots_basename, num_dfa_states; m
 end
 
 function plot_extent_outlines(extents, extents_dict, plots_basename)
-
-        # region_data = BSON.load("$results_path/regions.bson")
-    # extents = region_data[:extents]
     num_regions = length(keys(extents)) - 1
     X = extents[num_regions + 1]
     minx = minimum(X["x1"])
@@ -644,11 +631,10 @@ function plot_extent_outlines(extents, extents_dict, plots_basename)
 end
 # function plot_results_from_file_3d(results_path; plot_gp=false, min_threshold=0.95)
 #     region_data = BSON.load("$results_path/regions.bson")
-#     region_pairs = region_data[:pairs]
 #     extents = region_data[:extents]
 #     num_regions = length(keys(extents)) - 1
 #     num_regions = 
-#     X = extents[-11]
+#     X = extents[extents.count]
 #     minx = minimum(X["x1"])
 #     maxx = maximum(X["x1"])
 #     miny = minimum(X["x2"])

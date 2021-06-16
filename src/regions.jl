@@ -1,25 +1,49 @@
+function save_region_data(region_dict, region_post_dict, filename)
+	region_data = serialize_region_data(region_dict, region_post_dict)
+	bson(filename, Dict(:res => region_data))
+end
+
 function serialize_region_data(region_dict, region_post_dict)
 
 	num_regions = length(keys(region_dict))
-	# region_data[:pairs] = region_pairs	# This does not need to be serialized.
-	# region_pairs = product(1..num_regions, 1..num_regions)
-    region_data[:extents] = region_dict		# doesn't really need to be serialized...
-    region_data[:posts] = region_post_dict
-    # region_data[:gps] = region_gp_dic
-
 	# Assuming 2D square for now:
-
 	M = 10
 	region_data_array = zeros(num_regions, M)
-	
 	# Format: [minX, maxX, minY, maxY, μlX, μUX, μlY, μUY, σUX, σUY]
-	for i=1:keys(region_dict)
+	for i=1:num_regions - 1
 		region_data_array[i,1:2] = region_dict[i]["x1"]
 		region_data_array[i,3:4] = region_dict[i]["x2"]
 		region_data_array[i,5:6] = region_post_dict[i][1]["x1"]
 		region_data_array[i,7:8] = region_post_dict[i][1]["x2"]
 		region_data_array[i,9:10] = region_post_dict[i][2][:]
 	end
-	
+
+	region_data_array[num_regions,1:2] = region_dict[num_regions]["x1"]
+	region_data_array[num_regions,3:4] = region_dict[num_regions]["x2"]
+
 	return region_data_array
+end
+
+function deserialize_region_data(region_data_filename)
+	region_data_array = BSON.load(region_data_filename)[:res]
+	num_regions = size(region_data_array,1)
+	pair_iterator = Base.product(1:num_regions, 1:num_regions)
+	region_dict = Dict()
+	region_post_dict = Dict()
+	
+	for i=1:num_regions-1
+		region_dict[i] = Dict()
+		region_dict[i]["x1"] = region_data_array[i,1:2]
+		region_dict[i]["x2"] = region_data_array[i,3:4]
+		
+		region_post_dict[i] = (Dict(), region_data_array[i,9:10])
+		region_post_dict[i][1]["x1"] = region_data_array[i,5:6]
+		region_post_dict[i][1]["x2"] = region_data_array[i,7:8]
+	end
+
+	region_dict[num_regions] = Dict()
+	region_dict[num_regions]["x1"] = region_data_array[num_regions,1:2]
+	region_dict[num_regions]["x2"] = region_data_array[num_regions,3:4]
+	
+	return region_dict, region_post_dict, pair_iterator
 end

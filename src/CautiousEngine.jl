@@ -42,6 +42,7 @@ include("run_simulation.jl")
 include("offline.jl")
 include("online_control.jl")
 include("gps.jl")
+include("regions.jl")
 
 struct SystemParameters
     mode_tag::String
@@ -64,6 +65,7 @@ mutable struct DataParameters
     eta::Float64
     safety_dims
     local_radius::Float64
+    num_neighbors::Int
 end
 
 # TODO: Switch to params structure
@@ -108,32 +110,19 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
     # TODO: Move this
     @info "Determining the post-images of the regions under the linear map."
     region_time = @elapsed begin 
-        region_dict, region_pairs, extents_dict = create_region_data_new(params.domain, params.discretization_step)
-
+        region_dict, extents_dict = create_region_data_new(params.domain, params.discretization_step)
         region_post_dict = Dict()
 
-        L = length(keys(region_dict))
-        for i=1:length(keys(region_dict)) 
-            # TODO: Fix the indeces to not use -11
-            if i == L 
-                region = region_dict[-11]
-            else
-                region = region_dict[i]
-            end
+        for i=1:region_dict.count
+            region = region_dict[i]
             
             # Lazy representation saves time
             # TODO: Add the process noise term here for verification
             region_post = LinearMap(0.9999*system_matrix, region) 
-
-            if i == L 
-                region_post_dict[-11] = region_post 
-            else
-                region_post_dict[i] = region_post 
-            end
+            region_post_dict[i] = region_post 
         end 
 
         region_data = Dict()
-        region_data[:pairs] = region_pairs
         region_data[:extents] = extents_dict 
         region_data[:posts] = region_post_dict 
     end
@@ -145,7 +134,7 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
     bound_time = @elapsed begin
         @info "Calculating transition probability bounds between regions..."
         results_df = DataFrame(Set1 = Int[], Set2 = Int[], MinPr = Float64[], MaxPr = Float64[], MinPrPoint = Array[], MaxPrPoint = Array[])
-        for region_pair in region_pairs
+        for region_pair in Base.product(1:region_dict.count, 1:region_dict.count) 
             r1 = region_dict[region_pair[1]]
             r2 = region_dict[region_pair[2]]
             r1_post = region_post_dict[region_pair[1]]
@@ -178,7 +167,7 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
             else
                 for j = 1:1:num_states
                     if j == num_states
-                        subsub_row = sub_row[sub_row.Set2 .== -11, :]
+                        subsub_row = sub_row[sub_row.Set2 .== j, :]
                         minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
                         maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
                     else
@@ -306,9 +295,10 @@ function generate_region_images(params, gp_info_dict::Dict; reuse_regions_flag=f
     region_filename = "$exp_dir/regions.bson"
 
     if reuse_regions_flag && isfile(region_filename)
-        region_data = BSON.load(region_filename)
+        region_dict, region_post_dict, region_pair_iterator = deserialize_region_data(region_filename)
+        region_data = Dict(:extents => region_dict, :posts => region_post_dict)
     else
-        region_dict, region_pairs = create_region_data(params.domain, params.discretization_step)
+        region_dict = create_region_data(params.domain, params.discretization_step)
         num_regions = length(keys(region_dict))
         region_post_dict = Dict()
 
@@ -338,7 +328,6 @@ function generate_region_images(params, gp_info_dict::Dict; reuse_regions_flag=f
         end
 
         region_data = Dict()
-        region_data[:pairs] = region_pairs
         region_data[:extents] = region_dict
         region_data[:posts] = region_post_dict
     end
@@ -355,10 +344,11 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
     region_filename = "$exp_dir/regions.bson"
 
     if reuse_regions_flag && isfile(region_filename)
+        # TODO: Replace this fella!!!!
         region_data = BSON.load(region_filename)
     else
-        region_dict, region_pairs = create_region_data(params.domain, params.discretization_step)
-        num_regions = length(keys(region_dict))
+        region_dict = create_region_data(params.domain, params.discretization_step)
+        num_regions = region_dict.count 
         region_post_dict = Dict()
         region_gp_dict = Dict()
 
@@ -372,7 +362,7 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
         Threads.@threads for i=1:num_regions
             # Get subset of data here
             if i == num_regions
-                extent = region_dict[-11]
+                extent = region_dict[i]
                 lb = [extent[dim_key][1] for dim_key in dim_keys]
                 ub = [extent[dim_key][2] for dim_key in dim_keys]
                 # Assume 2D
@@ -389,7 +379,7 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
                
                 kdtree = KDTree(x_train);
                 
-                num_neighbors = 60;
+                num_neighbors = params.data_params.num_neighbors
                 sub_idx, _ = knn(kdtree, center, num_neighbors, true)
                 
                 x_sub = @view x_train[:, sub_idx]
@@ -403,7 +393,6 @@ function generate_region_images(params, x_train, y_train; reuse_regions_flag=fal
         end  # End threaded forloop
 
         region_data = Dict()
-        region_data[:pairs] = region_pairs
         region_data[:extents] = region_dict
         region_data[:posts] = region_post_dict
         region_data[:gps] = region_gp_dict
@@ -416,11 +405,7 @@ function save_region_data(params, region_data)
     @info "Saving the region data to the experiment directory..."
     exp_dir = create_experiment_directory(params)
     region_filename = "$exp_dir/regions.bson"
-    region_data_save = Dict()
-    region_data_save[:pairs] = region_data[:pairs]
-    region_data_save[:extents] = region_data[:extents]
-    region_data_save[:posts] = region_data[:posts]
-    bson(region_filename, region_data_save)
+    save_region_data(region_data[:extents], region_data[:posts], region_filename)
 end
 
 """
@@ -430,14 +415,13 @@ function generate_transition_bounds(params, gp_info_dict, region_data;
                                     reuse_mats_flag=false) 
 
     exp_dir = create_experiment_directory(params)
-    region_pairs = region_data[:pairs]
     region_dict = region_data[:extents]
     region_post_dict = region_data[:posts]
 
     tmat_filename = "$exp_dir/transition_mats.mat"
     if !reuse_mats_flag || !isfile(tmat_filename)
         @info "Calculating transition probability bounds between regions..."
-        results_df = process(region_pairs, region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
+        results_df = process(region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
 
         # Save the matrices for use in MATLAB verification tool
         num_states = length(keys(region_dict))
@@ -451,7 +435,7 @@ function generate_transition_bounds(params, gp_info_dict, region_data;
             else
                 for j = 1:1:num_states
                     if j == num_states
-                        subsub_row = sub_row[sub_row.Set2 .== -11, :]
+                        subsub_row = sub_row[sub_row.Set2 .== j, :]
                         minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
                         maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
                     else
@@ -475,7 +459,6 @@ function generate_transition_bounds(params, region_data;
                                     reuse_mats_flag=false) 
 
     exp_dir = create_experiment_directory(params)
-    region_pairs = region_data[:pairs]
     region_dict = region_data[:extents]
     region_post_dict = region_data[:posts]
     region_gp_dict = region_data[:gps]
@@ -483,7 +466,7 @@ function generate_transition_bounds(params, region_data;
     tmat_filename = "$exp_dir/transition_mats.mat"
     if !reuse_mats_flag || !isfile(tmat_filename)
         @info "Calculating transition probability bounds between regions..."
-        results_df = process_foo(region_pairs, region_dict, region_post_dict, region_gp_dict, params.data_params.epsilon, params)
+        results_df = process_foo(region_dict, region_post_dict, region_gp_dict, params.data_params.epsilon, params)
 
         # Save the matrices for use in MATLAB verification tool
         num_states = length(keys(region_dict))
@@ -497,7 +480,7 @@ function generate_transition_bounds(params, region_data;
             else
                 for j = 1:1:num_states
                     if j == num_states
-                        subsub_row = sub_row[sub_row.Set2 .== -11, :]
+                        subsub_row = sub_row[sub_row.Set2 .== j, :]
                         minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
                         maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
                     else
@@ -682,24 +665,26 @@ function fetch_results(N, r)
     return results_df 
 end
 
-function process(region_pairs, region_dict, region_post_dict, epsilon, gp_dict, params)
-    N = length(region_pairs)
+function process(region_dict, region_post_dict, epsilon, gp_dict, params)
+    prod = Base.product(1:region_dict.count-1, 1:region_dict.count)
+    N = length(prod)
     r = Array{Array, 1}(undef, N)
 
-    for i=1:N
-        r[i] = region_pair_transitions(region_pairs[i], region_dict, region_post_dict, epsilon, gp_dict, params)
+    for (i, pair) in enumerate(prod)
+        r[i] = region_pair_transitions(pair, region_dict, region_post_dict, epsilon, gp_dict, params)
     end
 
     results_df = fetch_results(N, r)
     return results_df
 end
 
-function process_foo(region_pairs, region_dict, region_post_dict, region_gp_dict, epsilon, params)
-    N = length(region_pairs)
+function process_foo(region_dict, region_post_dict, region_gp_dict, epsilon, params)
+    N = region_dict.count
     r = Array{Array, 1}(undef, N)
 
-    for i=1:N
-        r[i] = region_pair_transitions(region_pairs[i], region_dict, region_post_dict, epsilon, region_gp_dict[region_pairs[i][1]], params)
+    for (i, pair) = enumerate(Base.product(1:N, 1:N))
+        i == N ? continue : nothing
+        r[i] = region_pair_transitions(pairs[i], region_dict, region_post_dict, epsilon, region_gp_dict[pairs[i][1]], params)
     end
 
     results_df = fetch_results(N, r)
@@ -710,18 +695,8 @@ function create_region_data(space, grid_sizes)
     region_dict = discretize_set(space, grid_sizes)
 
     # THIS IS NOT CORRECT for a 3d model. 
-    region_dict[-11] = space # Region with index -11 corresponds to the safe set as a whole. 
-    # region_dict[-11]["x3"] = [-1e4, 1e4]
-
-    # Construct a list of all region pairs
-    starting_regions = collect(1:1:length(keys(region_dict))-1)  
-    region_pairs = []
-    for starting_region in starting_regions
-        for target_region_id in keys(region_dict) 
-            push!(region_pairs, (starting_region, target_region_id))
-        end
-    end   
-    return region_dict, region_pairs
+    region_dict[region_dict.count+1] = space # Region with index L+1 corresponds to the safe set as a whole. 
+    return region_dict
 end
 
 function create_region_data_new(space, grid_size)
@@ -729,19 +704,11 @@ function create_region_data_new(space, grid_size)
     x = space["x1"]
     y = space["x2"]
     # TODO: How to deal with this negative index in a better way
-    region_dict[-11] = VPolygon([[x[1], y[1]], [x[1], y[2]], 
+    region_dict[region_dict.count+1] = VPolygon([[x[1], y[1]], [x[1], y[2]], 
                                     [x[2], y[2]], [x[2], y[1]]])
-    extent_dict[-11] = space
+    extent_dict[region_dict.count+1] = space
 
-    # Construct a list of all region pairs
-    starting_regions = collect(1:1:length(keys(region_dict))-1)  
-    region_pairs = []
-    for starting_region in starting_regions
-        for target_region_id in keys(region_dict) 
-            push!(region_pairs, (starting_region, target_region_id))
-        end
-    end   
-    return region_dict, region_pairs, extent_dict
+    return region_dict, extent_dict
 end
 
 end
