@@ -654,13 +654,18 @@ function bound_extent(extent, lb, ub, gp_info_dict, dim_keys, data_deps; known_p
     for dim_key in dim_keys
         lbf = lb[findall(.>(0), data_deps[dim_key][:])]
         ubf = ub[findall(.>(0), data_deps[dim_key][:])]
-        x_lb, μ_L_lb, μ_L_ub = compute_μ_bounds_bnb(gp_info_dict[dim_key].gp, lbf, ubf) 
-        x_ub, μ_U_lb, μ_U_ub = compute_μ_bounds_bnb(gp_info_dict[dim_key].gp, lbf, ubf, max_flag=true)
+        x_lb, μ_L_lb, μ_L_ub = compute_μ_bounds_bnb(deepcopy(gp_info_dict[dim_key].gp), lbf, ubf) 
+        x_ub, μ_U_lb, μ_U_ub = compute_μ_bounds_bnb(deepcopy(gp_info_dict[dim_key].gp), lbf, ubf, max_flag=true)
         _, σ_U_lb, σ_U_ub = compute_σ_ub_bounds(gp_info_dict[dim_key].gp, gp_info_dict[dim_key].Kinv, lbf, ubf) 
-        @assert μ_L_lb <= μ_U_ub
+        if !(μ_L_lb <= μ_U_ub)
+            @error "μ LB is greater than μ UB! ", μ_L_lb, μ_U_ub
+            throw("aborting") 
+            @assert μ_L_lb <= μ_U_ub
+        end
         if !(σ_U_lb <= σ_U_ub)
             @error "Sigma LB is greater than sigma UB! ", σ_U_lb, σ_U_ub
             throw("aborting")
+            @assert σ_U_lb <= σ_U_ub
         end 
         if known_part_flag
             # Assume an identity form for now. Requires its own bounding process.
