@@ -58,7 +58,7 @@ end
 
 mutable struct DataParameters 
     data_num::Int
-    data_num_optimize::Int
+    data_frac_optimize::Float64
     bound_type::String
     noise_sigma::Float64
     epsilon::Float64

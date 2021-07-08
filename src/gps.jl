@@ -51,11 +51,12 @@ function train_gp_1dim(x_train, y_train; se_params=[0., 0.65], optimize_hyperpar
         opt_idx = StatsBase.sample(1:length(y_train), num_opt, replace = false)
         gp_pre = GP(x_train[:, opt_idx], y_train[opt_idx], m_prior, k_prior, lnoise) 
         optimize!(gp_pre)
-    end
-
-    gp = GP(x_train, y_train, m_prior, k_prior, lnoise)
-    if optimize_hyperparameters
-        optimize!(gp)
+        gp = update_gp_data(gp_pre, x_train, y_train)
+    else
+        gp = GP(x_train, y_train, m_prior, k_prior, lnoise)
+        if optimize_hyperparameters
+            optimize!(gp)
+        end 
     end
 
     return gp
@@ -80,7 +81,8 @@ function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filen
         end
     else 
         x_train_sub = x_train #[:, findall(.>(0), data_deps[out_dim])[:]]
-        gp_set = train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=false, lnoise=nothing, opt_fraction=1.0)
+        optimize_hyperparameters = params.data_params.data_frac_optimize > 0. ? true : false
+        gp_set = train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=optimize_hyperparameters, lnoise=nothing, opt_fraction=params.data_params.data_frac_optimize)
     end
 
     gp_info_dict = Dict()
