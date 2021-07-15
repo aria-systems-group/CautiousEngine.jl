@@ -18,6 +18,7 @@ using Serialization
 using MAT
 using Printf
 using IntervalSets
+using SparseArrays
 using Plots
 
 # Lazy sets, the hot new way to work with polytopes
@@ -157,8 +158,8 @@ function generate_linear_truth(params, system_matrix; single_mode_verification=f
 
         # TODO: Move this constructor to its own fcn
         num_states = length(keys(region_dict))
-        minPr_mat = zeros((num_states, num_states))
-        maxPr_mat = zeros((num_states, num_states))
+        minPr_mat = spzeros(num_states, num_states)
+        maxPr_mat = spzeros(num_states, num_states)
         for i = 1:1:num_states
             sub_row = results_df[results_df.Set1 .== i, :]
             if i == num_states
@@ -306,16 +307,26 @@ function generate_region_images(params, gp_info_dict::Dict; reuse_regions_flag=f
         domain = params.domain
         min_ex = [domain[dim_key][1] for dim_key in keys(domain)]
         max_ex = [domain[dim_key][2] for dim_key in keys(domain)]
-       
+      
+        mx = zeros(2,1)
+        mx[1] = max_ex[1]*1.1
+        mx[2] = max_ex[2]*1.1
         # Store the predicted mean and covariance for each sampled point 
         dim_keys = keys(domain)
+        σ_ubs = Dict()
+        # Calculate GP UBs
+        for dim_key in dim_keys
+            σ_ubs[dim_key] = 1.1*sqrt(predict_f(gp_info_dict[dim_key].gp, mx)[2][1])
+        end
+        σ_ubs = nothing
+        
         if Threads.nthreads() > 1
             Threads.@threads for i=1:num_regions-1
                 # @info "Bounding region $i/$num_regions"
                 extent = region_dict[i]
                 lb = [extent[dim_key][1] for dim_key in dim_keys]
                 ub = [extent[dim_key][2] for dim_key in dim_keys]
-                region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))
+                region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn), σ_ubs=σ_ubs)
             end
         else
             for i=1:num_regions-1
@@ -323,7 +334,7 @@ function generate_region_images(params, gp_info_dict::Dict; reuse_regions_flag=f
                 extent = region_dict[i]
                 lb = [extent[dim_key][1] for dim_key in dim_keys]
                 ub = [extent[dim_key][2] for dim_key in dim_keys]
-                region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn))
+                region_post_dict[i] = bound_extent(extent, lb, ub, gp_info_dict, dim_keys, params.system_params.dependency_dims; known_part_flag=!isnothing(params.system_params.known_dynamics_fcn), σ_ubs=σ_ubs)
             end
         end
 
@@ -418,34 +429,35 @@ function generate_transition_bounds(params, gp_info_dict, region_data;
     region_dict = region_data[:extents]
     region_post_dict = region_data[:posts]
 
-    tmat_filename = "$exp_dir/transition_mats.mat"
+    tmat_filename = "$exp_dir/transition_mats.bson"
     if !reuse_mats_flag || !isfile(tmat_filename)
         @info "Calculating transition probability bounds between regions..."
-        results_df = process(region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
+        minPr_mat, maxPr_mat = process(region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
+        # results_df = process(region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
 
         # Save the matrices for use in MATLAB verification tool
-        num_states = length(keys(region_dict))
-        minPr_mat = zeros((num_states, num_states))
-        maxPr_mat = zeros((num_states, num_states))
-        for i = 1:1:num_states
-            sub_row = results_df[results_df.Set1 .== i, :]
-            if i == num_states
-                minPr_mat[i, i] = 1.
-                maxPr_mat[i, i] = 1.
-            else
-                for j = 1:1:num_states
-                    if j == num_states
-                        subsub_row = sub_row[sub_row.Set2 .== j, :]
-                        minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
-                        maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
-                    else
-                        subsub_row = sub_row[sub_row.Set2 .== j, :]
-                        minPr_mat[i, j] = subsub_row.MinPr[1]
-                        maxPr_mat[i, j] = subsub_row.MaxPr[1]
-                    end
-                end
-            end
-        end
+        # num_states = length(keys(region_dict))
+        # minPr_mat = spzeros(num_states, num_states)
+        # maxPr_mat = spzeros(num_states, num_states)
+        # for i = 1:1:num_states
+        #     sub_row = results_df[results_df.Set1 .== i, :]
+        #     if i == num_states
+        #         minPr_mat[i, i] = 1.
+        #         maxPr_mat[i, i] = 1.
+        #     else
+        #         for j = 1:1:num_states
+        #             if j == num_states
+        #                 subsub_row = sub_row[sub_row.Set2 .== j, :]
+        #                 minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
+        #                 maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
+        #             else
+        #                 subsub_row = sub_row[sub_row.Set2 .== j, :]
+        #                 minPr_mat[i, j] = subsub_row.MinPr[1]
+        #                 maxPr_mat[i, j] = subsub_row.MaxPr[1]
+        #             end
+        #         end
+        #     end
+        # end
     end
 
     res_mats = Dict("minPr" => minPr_mat, "maxPr" => maxPr_mat)
@@ -463,15 +475,15 @@ function generate_transition_bounds(params, region_data;
     region_post_dict = region_data[:posts]
     region_gp_dict = region_data[:gps]
 
-    tmat_filename = "$exp_dir/transition_mats.mat"
+    tmat_filename = "$exp_dir/transition_mats.bson"
     if !reuse_mats_flag || !isfile(tmat_filename)
         @info "Calculating transition probability bounds between regions..."
         results_df = process_foo(region_dict, region_post_dict, region_gp_dict, params.data_params.epsilon, params)
 
         # Save the matrices for use in MATLAB verification tool
         num_states = length(keys(region_dict))
-        minPr_mat = zeros((num_states, num_states))
-        maxPr_mat = zeros((num_states, num_states))
+        minPr_mat = spzeros(num_states, num_states)
+        maxPr_mat = spzeros(num_states, num_states)
         for i = 1:1:num_states
             sub_row = results_df[results_df.Set1 .== i, :]
             if i == num_states
@@ -497,11 +509,15 @@ function generate_transition_bounds(params, region_data;
     return res_mats 
 end
 
+function load_transition_matrices(filename)
+    res_mats = BSON.load(filename)
+    return res_mats
+end
 
 function save_transition_matrices(params, res_mats)
     exp_dir = create_experiment_directory(params)
-    tmat_filename = "$exp_dir/transition_mats.mat"
-    matwrite(tmat_filename, res_mats) 
+    tmat_filename = "$exp_dir/transition_mats.bson"
+    bson(tmat_filename, res_mats) 
 end
 
 function save_time_info(params, time_info)
@@ -627,7 +643,7 @@ end
 ###############################################################################################
 
 # TODO: Fully implement this
-function bound_extent(extent, lb, ub, gp_info_dict, dim_keys, data_deps; known_part_flag=false)
+function bound_extent(extent, lb, ub, gp_info_dict, dim_keys, data_deps; known_part_flag=false, σ_ubs=nothing, σ_approx_flag=false)
 
     lb = [extent[dim_key][1] for dim_key in dim_keys]
     ub = [extent[dim_key][2] for dim_key in dim_keys] 
@@ -639,7 +655,15 @@ function bound_extent(extent, lb, ub, gp_info_dict, dim_keys, data_deps; known_p
         ubf = ub[findall(.>(0), data_deps[dim_key][:])]
         x_lb, μ_L_lb, μ_L_ub = compute_μ_bounds_bnb(deepcopy(gp_info_dict[dim_key].gp), lbf, ubf) 
         x_ub, μ_U_lb, μ_U_ub = compute_μ_bounds_bnb(deepcopy(gp_info_dict[dim_key].gp), lbf, ubf, max_flag=true)
-        _, σ_U_lb, σ_U_ub = compute_σ_ub_bounds(gp_info_dict[dim_key].gp, gp_info_dict[dim_key].Kinv, lbf, ubf) 
+
+        if σ_approx_flag
+            _, σ_U_lb, σ_U_ub = compute_σ_ub_bounds_approx(gp_info_dict[dim_key].gp, lbf, ubf) 
+        elseif !isnothing(σ_ubs)
+            _, σ_U_lb, σ_U_ub = compute_σ_ub_bounds_from_gp(gp_info_dict[dim_key].gp, lbf, ubf, ub=σ_ubs[dim_key])
+        else
+            _, σ_U_lb, σ_U_ub = compute_σ_ub_bounds(gp_info_dict[dim_key].gp, gp_info_dict[dim_key].Kinv, lbf, ubf)
+        end
+       
         if !(μ_L_lb <= μ_U_ub)
             @error "μ LB is greater than μ UB! ", μ_L_lb, μ_U_ub
             throw("aborting") 
@@ -672,15 +696,59 @@ end
 
 function process(region_dict, region_post_dict, epsilon, gp_dict, params)
     prod = Base.product(1:region_dict.count-1, 1:region_dict.count)
-    N = length(prod)
-    r = Array{Array, 1}(undef, N)
+    # N = length(prod)
+    # r = Array{Array, 1}(undef, N)
 
-    for (i, pair) in enumerate(prod)
-        r[i] = region_pair_transitions(pair, region_dict, region_post_dict, epsilon, gp_dict, params)
+    minPrs = spzeros(region_dict.count, region_dict.count)
+    maxPrs = spzeros(region_dict.count, region_dict.count)
+
+    # for (i, pair) in enumerate(prod)
+    #     res = region_pair_transitions(pair, region_dict, region_post_dict, epsilon, gp_dict, params)
+    #     if pair[2] == region_dict.count
+    #         minPrs[pair[1], pair[2]] = 1. - res[3]
+    #         maxPrs[pair[1], pair[2]] = 1. - res[4]
+    #     else
+    #         minPrs[pair[1], pair[2]] = res[3]
+    #         maxPrs[pair[1], pair[2]] = res[4]
+    #     end
+    # end
+
+    mean_dict = Dict()
+
+    for i=1:region_dict.count-1
+        region = region_dict[i]
+        mean_dict[i] = [mean(region[dim_key]) for dim_key in keys(region)] 
     end
 
-    results_df = fetch_results(N, r)
-    return results_df
+    set_radius = sqrt(2)*params.discretization_step["x1"]
+
+    for i=1:region_dict.count-1
+        ϵ_crit = calculate_ϵ_crit(gp_dict, region_post_dict[i][2])
+        # calculate center of post image
+        post_image = region_post_dict[i][1]
+        mean_pt = [mean(post_image[dim_key]) for dim_key in keys(post_image)]
+        # TODO: This is not generalized
+        image_radius = sqrt((mean_pt[1] - post_image["x1"][1])^2 + (mean_pt[1] - post_image["x2"][1])^2) 
+        for j=1:region_dict.count-1
+            if fast_check(mean_pt, mean_dict[j], ϵ_crit, image_radius, set_radius)
+                res = region_pair_transitions((i,j), region_dict, region_post_dict, epsilon, gp_dict, params)
+            else
+                res = [i, j, 0., 0., [-1., -1.], [-11., -11.]]
+            end
+            minPrs[i, j] = res[3]
+            maxPrs[i, j] = res[4]
+        end
+
+        res = region_pair_transitions((i,region_dict.count), region_dict, region_post_dict, epsilon, gp_dict, params)
+        minPrs[i, region_dict.count] = 1. - res[3]
+        maxPrs[i, region_dict.count] = 1. - res[4]
+    end
+
+    minPrs[region_dict.count, :] .= 1.
+    maxPrs[region_dict.count, :] .= 1.
+   
+    # results_df = fetch_results(N, r)
+    return minPrs, maxPrs 
 end
 
 function process_foo(region_dict, region_post_dict, region_gp_dict, epsilon, params)

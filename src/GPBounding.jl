@@ -7,9 +7,7 @@ using Distributions
 
 include("squared_exponential.jl")
 
-export compute_μ_bounds_bnb, compute_σ_ub_bounds, compute_σ_ub_bounds_auto, compute_σ_ub_bounds_approx
-#TODO: Eventually move this to a different file. 
-#TODO: Compute lower bounds of sigma someday
+export compute_μ_bounds_bnb, compute_σ_ub_bounds, compute_σ_ub_bounds_auto, compute_σ_ub_bounds_approx, compute_σ_ub_bounds_from_gp
 
 function compute_μ_bounds_bnb(gp, x_L, x_U; max_iterations=100, bound_epsilon=1e-2, max_flag=false)
     # By default, it calculates bounds on the minimum. 
@@ -176,6 +174,31 @@ function compute_σ_ub_bounds_approx(gp, x_L, x_U)
         end
     end
     return 0., 0., sqrt(σ2_best[1])
+end
+
+function create_x_matrix(xL, xU, N)
+    dim = length(xL)
+    xds = [(xU[i]-xL[i])/N for i=1:dim]
+    # Assume 2D for now
+    xd_prod = collect(Iterators.product(xL[1]:xds[1]:xU[1], xL[2]:xds[2]:xU[2]))
+    return reshape(collect(Iterators.flatten(xd_prod)), dim, length(xd_prod))
+end
+
+function prepare_σ_gp(gp, x_L, x_U, ub; N=10, ll=-2.0)
+    xn = create_x_matrix(x_L, x_U, N)
+    yn = sqrt.(predict_f(gp, xn)[2])
+    
+    meanfcn = MeanConst(ub)
+    kernel = SE(ll, 0.0)
+    
+    gp_σ = GP(xn, yn, meanfcn, kernel, 0.0)
+    return gp_σ
+end
+
+function compute_σ_ub_bounds_from_gp(gp, x_L, x_U; ub=1.0)
+    σ_gp = prepare_σ_gp(gp, x_L, x_U, ub)
+    res_test = GPBounding.compute_μ_bounds_bnb(σ_gp, x_L, x_U, max_flag=true, max_iterations=4)
+    return res_test[1], 0., res_test[3][1]+ub
 end
 
 end # module

@@ -20,15 +20,15 @@ function create_switched_system(system_dirs::Array{String,1}, exp_dir::String)
     maxPr_mats = []
 
     for system_dir in system_dirs
-        res = matread("$system_dir/transition_mats.mat")
-        push!(minPr_mats, res["minPr"])
-        push!(maxPr_mats, res["maxPr"])
+        res_mats = load_transition_matrices("$system_dir/transition_mats.bson")
+        push!(minPr_mats, res_mats["minPr"])
+        push!(maxPr_mats, res_mats["maxPr"])
     end
 
     mm_minPr, mm_maxPr = create_switched_system_matrix(minPr_mats, maxPr_mats)
 
     # Save and return directory
-    matwrite("$new_dirname/transition_mats.mat", Dict("minPr" => mm_minPr, "maxPr" => mm_maxPr))
+    bson("$new_dirname/transition_mats.bson", Dict("minPr" => mm_minPr, "maxPr" => mm_maxPr))
 
     return new_dirname, mm_minPr, mm_maxPr 
 end

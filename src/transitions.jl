@@ -1,3 +1,9 @@
+"Determine the set of states that will have non-zero transition probability upper bounds."
+function fast_check(mean_pt, mean_target, ϵ_crit, image_radius, set_radius)
+    flag = norm(mean_pt - mean_target) < ϵ_crit + image_radius + set_radius
+    return flag
+end
+
 "Calculate the transition probabilities between a pair of regions."
 function region_pair_transitions(region_pair, region_dict, region_post_dict, ϵ, gp_info_dict, params)
     dict_row = region_post_dict[region_pair[1]]
@@ -319,7 +325,27 @@ function calculate_probability_bound_dict(gp_info_dict, σ_bounds, ϵ)
         else
             @error "Invalid bound type:" bound_type
         end
-
     end
     return Pr_bound
+end
+
+function calculate_ϵ_crit(gp_info_dict, σ_bounds)
+    candidates = []
+    for (i, dim_key) in enumerate(keys(gp_info_dict))
+        ϵ = 0.01
+        P = 0.0
+        bound_type = gp_info_dict[dim_key].bound_type
+        while P != 1.0
+            if bound_type == "rkhs-tight" 
+                P = 1. - tight_rkhs_bound_prob(σ_bounds[i], ϵ, gp_info_dict[dim_key])
+            elseif bound_type == "rkhs-original"
+                P = 1. - original_rkhs_bound_prob(σ_bounds[i], ϵ, gp_info_dict[dim_key])
+            else
+                @error "Invalid bound type:" bound_type
+            end
+            ϵ *= 1.5
+        end
+        push!(candidates, ϵ)
+    end
+    return maximum(candidates)
 end

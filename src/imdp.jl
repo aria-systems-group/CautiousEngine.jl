@@ -1,13 +1,12 @@
 struct IMDP
     states
     actions
-    Pbounds
+    Pmin
+    Pmax
     labels
     sink_labels
     initial_state
 end
-
-using IntervalSets
 
 """
 Create an IMDP from a list of result directories.
@@ -15,12 +14,11 @@ Create an IMDP from a list of result directories.
 function create_imdp_from_result_dirs(res_dirs, exp_dir; label_fn=nothing)
     sys_dir, minPr, maxPr = create_switched_system(res_dirs, exp_dir)
     N, M = size(minPr)
-    Pbounds = hcat([[minPr[i, j]..maxPr[i,j] for i=1:N] for j=1:M]...)
     Q = collect(1:M)
     A = collect(1:Int(N/M))
     @debug "Actions: " A
     labels = Dict()
-    imdp = IMDP(Q, A, Pbounds, labels, nothing, 1)
+    imdp = IMDP(Q, A, minPr, maxPr, labels, nothing, 1)
     if !isnothing(label_fn)
         create_imdp_labels(label_fn, imdp, "$exp_dir/switched-system/regions.bson")
     end
@@ -32,7 +30,6 @@ Create an IMDP from a set of transition bound matrices.
 "
 function create_simple_imdp(minPr, maxPr)
     N, _ = size(minPr)
-    Pbounds = hcat([[minPr[i, j]..maxPr[i,j] for i=1:N] for j=1:N]...)
     Q = collect(1:N)
     A = [1]
     labels = Dict()
@@ -40,7 +37,7 @@ function create_simple_imdp(minPr, maxPr)
         labels[i] = "safe"
     end
     labels[N] = "!safe"
-    imdp = IMDP(Q, A, Pbounds, labels, nothing, 1)
+    imdp = IMDP(Q, A, minPr, maxPr, labels, nothing, 1)
     return imdp 
 end
 
@@ -78,13 +75,13 @@ function write_imdp_to_file_bounded(imdp, Qyes, Qno, filename)
             if isnothing(sink_states) || !(i∈sink_states)
                 for action in imdp.actions
                     row_idx = (i-1)*action_num + action
-                    ij = findall(>(0.), maximum.(imdp.Pbounds[(i-1)*action_num + action, :]))   
+                    ij = findall(>(0.), imdp.Pmax[(i-1)*action_num + action, :])   
                     # Something about if the upper bound is less than one? Perhaps for numerical issues?
                     @debug action, i
-                    psum = sum(maximum.(imdp.Pbounds[row_idx, :]))
+                    psum = sum(imdp.Pmax[row_idx, :])
                     psum >= 1 ? nothing : throw(AssertionError("Bad max sum: $psum")) 
                     for j=ij
-                        @printf(f, "%d %d %d %f %f", i-1, action-1, j-1, minimum(imdp.Pbounds[row_idx, j]), maximum(imdp.Pbounds[row_idx, j]))
+                        @printf(f, "%d %d %d %f %f", i-1, action-1, j-1, imdp.Pmin[row_idx, j], imdp.Pmax[row_idx, j])
                         if (i < state_num || j < ij[end] || action < action_num)
                             @printf(f, "\n")
                         end
@@ -115,9 +112,9 @@ function create_dot_graph(imdp::IMDP, filename::String)
             for action in imdp.actions
                 row_idx = (state-1)*length(imdp.actions) + action
 
-                for idx in findall(>(0.), maximum.(imdp.Pbounds[row_idx, :]))
+                for idx in findall(>(0.), imdp.Pmax[row_idx, :])
                     state_p = idx
-                    @printf(f, "  %d -> %d [label=<a<SUB>%d</SUB>: %.1f-%.1f >]\n", state, state_p, action, minimum(imdp.Pbounds[row_idx,state_p]), maximum(imdp.Pbounds[row_idx,state_p]))
+                    @printf(f, "  %d -> %d [label=<a<SUB>%d</SUB>: %.1f-%.1f >]\n", state, state_p, action, imdp.Pmin[row_idx,state_p], imdp.Pmax[row_idx,state_p])
                 end
             end
         end
