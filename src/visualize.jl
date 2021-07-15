@@ -189,12 +189,14 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
                                 xtickfont=font(10),
                                 ytickfont=font(10),
                                 titlefont=font(10),
+                                xticks = [minx, 0, maxx],
+                                yticks = [miny, 0, maxy],
                                 grid=false,
                                 backgroundcolor=128)
 
         # Plot the cells
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
         [plot_cell_verify(extents[i], minPrs[i], maxPrs[i], min_threshold) for i in 1:num_regions]
+        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
 
         # Plot extents with labels
         for key in keys(extents_dict)
@@ -214,8 +216,8 @@ Plot a labelled extent
 function plot_labelled_extent_outline(extent, label; color=:white)
     xvals = extent["x1"]
     yvals = extent["x2"]
-    plot!(extent_dict_to_shape(extent), fillalpha=0, linecolor=:black, linewidth=2, label="")
-    annotate!(minimum(xvals)+0.05, minimum(yvals)+0.125, text(label, color, :left, 8,))
+    plot!(extent_dict_to_shape(extent), fillalpha=0, linecolor=:black, linewidth=1, label="")
+    annotate!((minimum(xvals)+maximum(xvals))/2, (minimum(yvals)+maximum(yvals))/2, text(label, color, :center, 10,))
 end
 
 """

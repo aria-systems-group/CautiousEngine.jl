@@ -78,9 +78,9 @@ for k in k_vals
 end
 
 annotation_dict = Dict()
-annotation_dict["Obs"] = labels_dict["!a∧b"]
-annotation_dict["Des"] = labels_dict["a∧!b"]
+annotation_dict["O"] = labels_dict["!a∧b"]
+annotation_dict["D"] = labels_dict["a∧!b"]
 extents_labels_colors = Dict()
-extents_labels_colors["Obs"] = :white
-extents_labels_colors["Des"] = :black
+extents_labels_colors["O"] = :white
+extents_labels_colors["D"] = :black
 CautiousEngine.plot_2d_verification_results(results_path, extents_dict=annotation_dict, extents_labels_colors=extents_labels_colors)
