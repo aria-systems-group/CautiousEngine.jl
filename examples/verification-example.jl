@@ -1,6 +1,6 @@
 using Distributions
 using Random
-using IntervalSets
+using SparseArrays 
 
 using CautiousEngine
 
@@ -84,4 +84,4 @@ for k in k_vals
     verification_result_mat = CautiousEngine.Globally(imdp, "safe", k, "$switched_system_dir/switched-system/imdp-$k.txt")
     CautiousEngine.save_legacy_mats(verification_result_mat, "$switched_system_dir/switched-system", k)
 end
-CautiousEngine.plot_results_from_file("$switched_system_dir/switched-system", plot_gp=false)
+CautiousEngine.plot_2d_verification_results("$switched_system_dir/switched-system")
