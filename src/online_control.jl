@@ -151,18 +151,19 @@ function online_control_loop_optimal(ocp::OnlineControlProblem;
                 lb = [current_extent[dim_key][1] for dim_key in dim_keys]
                 ub = [current_extent[dim_key][2] for dim_key in dim_keys]
 
-                ## TODO: THIS IS FXCK MESSY
+                ## TODO: THIS IS MESSY
                 region_post_dict_new = bound_extent(current_extent, lb, ub, gp_info_dict, dim_keys, Dict("x1" => [1., 1.], "x2" => [1., 1.]); known_part_flag=true)
                 dummy_region_post_dict = Dict(extent_id => region_post_dict_new)
                 
                 for pimdp_row_idx in pimdp_rows
-                    prow = ocp.pimdp.Pbounds[pimdp_row_idx, :]
+                    prow_min = ocp.pimdp.Pmin[pimdp_row_idx, :] 
+                    prow_max = ocp.pimdp.Pmax[pimdp_row_idx, :]
 
                     # Find all states with interval bounds
-                    regions_to_update = findall(x->minimum(x)!=maximum(x), prow)
-                    pimdp_row_values = prow[regions_to_update]
+                    regions_to_update = findall(x->x>0, prow_min .!= prow_max)
+                    pimdp_row_vals_min = prow_min[regions_to_update]
+                    pimdp_row_vals_max = prow_max[regions_to_update]
 
-                    
                     noise_proc = Truncated(Normal(0, 0.01), -0.01, 0.01)
                     η = 0.01
                     ϵ = -1
@@ -176,27 +177,24 @@ function online_control_loop_optimal(ocp::OnlineControlProblem;
                             minPrn = 1 - frame_row[4] 
                             maxPrn = 1 - frame_row[3]
 
-                            if minPrn > minimum(prow[target])
-                                maxPr = maximum(prow[target])
-                                prow[target] = minPrn..maxPr
+                            if minPrn > prow_min[target]
+                                prow_min[target] = minPrn
                             end
-                            if maxPrn < maximum(prow[target]) 
-                                minPr = minimum(prow[target])
-                                prow[target] = minPr..maxPrn
+                            if maxPrn < prow_max[target]
+                                prow_max[target] = maxPrn
                             end
                         else
-                            if frame_row[4] < maximum(prow[target])
-                                minPr = minimum(prow[target])
-                                prow[target] = minPr..frame_row[4]
+                            if frame_row[4] < prow_max[target]
+                                prow_max[target] = frame_row[4]
                             end
-                            if frame_row[3] > minimum(prow[target]) 
-                                maxPr = maximum(prow[target])
-                                prow[target] = frame_row[3]..maxPr
+                            if frame_row[3] > prow_min[target]
+                                prow_min[target] = frame_row[3]
                             end
                         end
                     end
 
-                    ocp.pimdp.Pbounds[pimdp_row_idx, :] = prow
+                    ocp.pimdp.Pmin[pimdp_row_idx, :] = prow_min
+                    ocp.pimdp.Pmax[pimdp_row_idx, :] = prow_max
                 end
             end
         end
@@ -321,10 +319,10 @@ function get_best_action(ocp::OnlineControlProblem; gp_use_key="global", pimdp_r
             gp_info_dict = get_gp_info(ocp, mode, x_c, gp_use_case=gp_use_key)
             # Extract the relevant row of the PIMDP transition matrix
             P_row_idx = map_pimdp_state_to_Pmat_row(q_c, length(ocp.dfa.states), length(ocp.pimdp.actions), mode)
-            prow = ocp.pimdp.Pbounds[P_row_idx, :]
+            prow_max = ocp.pimdp.Pmax[P_row_idx, :]
 
             # Find all states with interval bounds with non-zero UB
-            regions_with_nonzero_ub = findall(x->maximum(x)>0., prow) 
+            regions_with_nonzero_ub = findall(x->x>0., prow_max) 
             @debug regions_with_nonzero_ub
 
             ##### Test out the point region transition fcn
@@ -523,10 +521,10 @@ Get pimdp states with non-trivial transition bounds
 function get_nontrivial_next_pimdp_states(pimdp, dfa, pimdp_state, mode, foo)
     P_row_idx = map_pimdp_state_to_Pmat_row(pimdp_state, length(dfa.states), length(pimdp.actions), mode)
     # @info pimdp_state
-    prow = pimdp.Pbounds[P_row_idx, :]
+    prow_max = pimdp.Pmax[P_row_idx, :]
 
     # Find all states with interval bounds with non-zero UB
-    regions_with_nonzero_ub = findall(x->maximum(x)>0., prow) 
+    regions_with_nonzero_ub = findall(x->x>0., prow_max) 
     return regions_with_nonzero_ub
 end
 

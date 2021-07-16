@@ -165,9 +165,11 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
                        xtickfont=font(10),
                        ytickfont=font(10),
                        titlefont=font(10),
+                       xticks = [minx, 0, maxx],
+                       yticks = [miny, 0, maxy],
                        grid=false)
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
         [plot_cell(extents[i], maxPrs[i]) for i in 1:num_regions]
+        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
         savefig(plt_max, "$results_path/$base_str-max-heatmap.png")
 
         # Plot the minimum probabilities 
@@ -177,10 +179,12 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
                        xtickfont=font(10),
                        ytickfont=font(10),
                        titlefont=font(10),
+                       xticks = [minx, 0, maxx],
+                       yticks = [miny, 0, maxy],
                        grid=false,
                        backgroundcolor=128)
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
         [plot_cell(extents[i], minPrs[i]) for i in 1:num_regions]
+        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
         savefig(plt_min, "$results_path/$base_str-min-heatmap.png")
 
         plt_verification = plot(aspect_ratio=1,

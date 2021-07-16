@@ -1,7 +1,8 @@
 mutable struct PIMDP
     states
     actions
-    Pbounds
+    Pmin
+    Pmax 
     imdp_label_dict
     accepting_labels
     sink_labels
@@ -22,7 +23,7 @@ function construct_PIMDP_from_IMDP(imdp, unsafe_states)
     # TODO: This is very hackkkkky
     sink_labels = zeros(1, length(imdp.states))
     sink_labels[unsafe_states] .= 1
-    pimdp = PIMDP(imdp.states, imdp.actions, imdp.Pbounds, nothing, sink_labels, [],
+    pimdp = PIMDP(imdp.states, imdp.actions, imdp.Pmin, imdp.Pmax, nothing, sink_labels, [],
                   nothing, nothing, nothing, nothing)
 
     return pimdp
@@ -40,9 +41,11 @@ function construct_DFA_IMDP_product(dfa, imdp)
     dfa_sink_state = dfa.sink_state
 
     # Transition matrix size will be Nx|Q| -- or the original transition matrix permutated with the number of states in DFA
-    Pbounds = imdp.Pbounds
-    N, M = size(Pbounds)
-    Pbounds_new = hcat([[0.0..0.0 for i=1:N*sizeQ] for j=1:M*sizeQ]...)
+    Pmin = imdp.Pmin
+    Pmax = imdp.Pmax
+    N, M = size(Pmin)
+    Pmin_new = spzeros(N*sizeQ, M*sizeQ)
+    Pmax_new = spzeros(N*sizeQ, M*sizeQ) 
 
     pimdp_states = []
     pimdp_actions = imdp.actions
@@ -61,16 +64,19 @@ function construct_DFA_IMDP_product(dfa, imdp)
             for sqp in pimdp_states
                 qp_test = δ(dfa.transitions, sq[2], imdp.labels[sq[1]])
                 if qp_test == sqp[2]
-                    # Get the corresponding entry of the Pbounds matrix
+                    # Get the corresponding entry of the transition interval matrices
                     row_idx = (sq[1]-1)*sizeQ*sizeA + (sq[2]-1)*sizeA + a 
                     if (sq[2] == dfa_acc_state && sqp[2] == dfa_acc_state) || (sq[2] == dfa_sink_state && sqp[2] == dfa_sink_state)
                         # Flush out the old probabilities
                         col_idx = (sq[1]-1)*sizeQ + sq[2]  
-                        Pbounds_new[row_idx, :] .= [0.0..0.0]
-                        Pbounds_new[row_idx, col_idx] = 1.0..1.0
+                        # Pmin_new[row_idx, :] .= 0.  # Redundant??
+                        # Pmax_new[row_idx, :] .= 0.
+                        Pmin_new[row_idx, col_idx] = 1.0
+                        Pmax_new[row_idx, col_idx] = 1.0
                     else
                         col_idx = (sqp[1]-1)*sizeQ + sqp[2]
-                        Pbounds_new[row_idx, col_idx] = Pbounds[(sq[1]-1)*sizeA + a, sqp[1]]
+                        Pmin_new[row_idx, col_idx] = Pmin[(sq[1]-1)*sizeA + a, sqp[1]]
+                        Pmax_new[row_idx, col_idx] = Pmax[(sq[1]-1)*sizeA + a, sqp[1]]
                     end
                 end
             end
@@ -83,7 +89,7 @@ function construct_DFA_IMDP_product(dfa, imdp)
     sink_labels = zeros(1, M*sizeQ)
     sink_labels[dfa_sink_state:sizeQ:M*sizeQ] .= 1
 
-    pimdp = PIMDP(pimdp_states, imdp.actions, Pbounds_new, imdp.labels, labels, sink_labels, nothing, nothing, nothing, nothing)
+    pimdp = PIMDP(pimdp_states, imdp.actions, Pmin_new, Pmax_new, imdp.labels, labels, sink_labels, nothing, nothing, nothing, nothing)
     return pimdp 
 end
 
@@ -110,14 +116,13 @@ function write_pimdp_to_file(pimdp, filename)
             if isnothing(sink_states) || !(i∈sink_states)
                 for action in pimdp.actions
                     row_idx = (i-1)*action_num + action
-                    ij = findall(>(0.), maximum.(pimdp.Pbounds[row_idx, :]))   
+                    ij = findall(>(0.), pimdp.Pmax[row_idx, :])  
                     # Something about if the upper bound is less than one? Perhaps for numerical issues?
                     @debug action, i
-                    psum = sum(maximum.(pimdp.Pbounds[row_idx, :]))
-                    # @assert sum(maximum.(pimdp.Pbounds[row_idx, :])) >= 1
+                    psum = sum(pimdp.Pmax[row_idx, :])
                     psum >= 1 ? nothing : throw(AssertionError("Bad max sum: $psum")) 
                     for j=ij
-                        @printf(f, "%d %d %d %f %f", i-1, action-1, j-1, minimum(pimdp.Pbounds[row_idx, j]), maximum(pimdp.Pbounds[row_idx, j]))
+                        @printf(f, "%d %d %d %f %f", i-1, action-1, j-1, pimdp.Pmin[row_idx, j], pimdp.Pmax[row_idx, j])
                         if (i < state_num || j < ij[end] || action < action_num)
                             @printf(f, "\n")
                         end
@@ -148,11 +153,11 @@ function create_dot_graph(pimdp::PIMDP, filename::String)
                 q_size = 3
                 row_idx = (state[1]-1)*length(pimdp.actions)*q_size + (state[2]-1)*length(pimdp.actions) + action
 
-                for idx in findall(>(0.), maximum.(pimdp.Pbounds[row_idx, :]))
+                for idx in findall(>(0.), pimdp.Pmax[row_idx, :])
                     state_p = pimdp.states[idx]
                     col_idx = (state_p[1]-1)*q_size + state_p[2]
                     # TODO: fix the second index to be correct
-                    @printf(f, "  %d -> %d [label=<a<SUB>%d</SUB>: %.1f-%.1f >]\n", i, idx, action, minimum(pimdp.Pbounds[row_idx,col_idx]), maximum(pimdp.Pbounds[row_idx,col_idx]))
+                    @printf(f, "  %d -> %d [label=<a<SUB>%d</SUB>: %.1f-%.1f >]\n", i, idx, action, pimdp.Pmin[row_idx,col_idx], pimdp.Pmax[row_idx,col_idx])
                 end
             end
             i+=1
@@ -171,7 +176,8 @@ function read_pimdp_from_file(filename)
         num_actions = tryparse(Int, readline(f)) 
         num_sink_states = tryparse(Int, readline(f))
         accept_states = parse.(Int, split(readline(f))) .+ 1
-        Pbounds = hcat([[0.0..0.0 for i=1:num_states*num_actions] for j=1:num_states]...) 
+        Pmin = spzeros(num_states*num_actions, num_states)
+        Pmax = spzeros(num_states*num_actions, num_states) 
         while !eof(f)
             row_split = split(readline(f))
             if length(row_split) > 0
@@ -182,11 +188,12 @@ function read_pimdp_from_file(filename)
                 phigh = parse(Float64, row_split[5])
                 row_idx = q0*num_actions + a 
                 col_idx = qt + 1
-                Pbounds[row_idx, col_idx] = plow..phigh
+                Pmin[row_idx, col_idx] = plow
+                Pmax[row_idx, col_idx] = phigh
             end
         end
 
-        pimdp = PIMDP(collect(1:num_states), collect(1:num_actions), Pbounds, 
+        pimdp = PIMDP(collect(1:num_states), collect(1:num_actions), Pmin, Pmax, 
         nothing, accept_states, [], nothing, nothing, nothing, nothing)
     end
 
@@ -197,9 +204,9 @@ end
 Quickly Validate a (P)IMDP object.
 """
 function validate_pimdp(pimdp)
-    for row in eachrow(pimdp.Pbounds)
-        @assert sum(maximum.(row)) >= 1
-        @assert sum(minimum.(row)) <= 1
+    for (minrow, maxrow) in zip(eachrow(pimdp.Pmin), eachrow(pimdp.Pmax))
+        @assert sum(maxrow) >= 1
+        @assert sum(minrow) <= 1
     end
 end
 

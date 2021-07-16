@@ -69,7 +69,7 @@ function map_pimdp_state_to_index(state::Tuple, num_dfa_states::Int)
 end
 
 """
-Find the row of the Pbounds matrix given the PIMDP state and action #
+Find the row of the PIMDP transition interval matrix given the PIMDP state and action #
 """
 function map_pimdp_state_to_Pmat_row(state::Tuple, num_dfa_states::Int, num_actions::Int, action::Int)
     row_idx = (state[1]-1)*num_dfa_states*num_actions + (state[2]-1)*num_actions + action 
