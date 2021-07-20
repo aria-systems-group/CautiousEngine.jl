@@ -139,8 +139,8 @@ function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, m
     end
 end
 
-function plot_2d_verification_results(results_path;num_dfa_states=1, min_threshold=0.95, extents_dict=Dict(), extents_labels_colors=Dict())
-    extents, _ = deserialize_region_data("$results_path/regions.bson")
+function plot_2d_verification_results(results_path;num_dfa_states=1, min_threshold=0.95, extents_dict=Dict(), extents_labels_colors=Dict(), prob_plots=false, lazy_flag=false)
+    extents, _ = deserialize_region_data("$results_path/regions.bson", lazy_flag=lazy_flag)
     num_regions = extents.count - 1 
     X = extents[extents.count]
     minx = minimum(X["x1"])
@@ -158,34 +158,36 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
         maxPrs = res["indVmax"][1:num_dfa_states:end]
         minPrs = res["indVmin"][1:num_dfa_states:end]
 
-        # Plot the maximumprobabilities 
-        plt_max = plot(aspect_ratio=1,
-                       size=(300,300), dpi=300,
-                       xlims=[minx, maxx], ylims=[miny, maxy],
-                       xtickfont=font(10),
-                       ytickfont=font(10),
-                       titlefont=font(10),
-                       xticks = [minx, 0, maxx],
-                       yticks = [miny, 0, maxy],
-                       grid=false)
-        [plot_cell(extents[i], maxPrs[i]) for i in 1:num_regions]
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-        savefig(plt_max, "$results_path/$base_str-max-heatmap.png")
+        if prob_plots
+            # Plot the maximumprobabilities 
+            plt_max = plot(aspect_ratio=1,
+                        size=(300,300), dpi=300,
+                        xlims=[minx, maxx], ylims=[miny, maxy],
+                        xtickfont=font(10),
+                        ytickfont=font(10),
+                        titlefont=font(10),
+                        xticks = [minx, 0, maxx],
+                        yticks = [miny, 0, maxy],
+                        grid=false)
+            [plot_cell(extents[i], maxPrs[i]) for i in 1:num_regions]
+            plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
+            savefig(plt_max, "$results_path/$base_str-max-heatmap.png")
 
-        # Plot the minimum probabilities 
-        plt_min = plot(aspect_ratio=1,
-                       size=(300,300), dpi=300,
-                       xlims=[minx, maxx], ylims=[miny, maxy],
-                       xtickfont=font(10),
-                       ytickfont=font(10),
-                       titlefont=font(10),
-                       xticks = [minx, 0, maxx],
-                       yticks = [miny, 0, maxy],
-                       grid=false,
-                       backgroundcolor=128)
-        [plot_cell(extents[i], minPrs[i]) for i in 1:num_regions]
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-        savefig(plt_min, "$results_path/$base_str-min-heatmap.png")
+            # Plot the minimum probabilities 
+            plt_min = plot(aspect_ratio=1,
+                        size=(300,300), dpi=300,
+                        xlims=[minx, maxx], ylims=[miny, maxy],
+                        xtickfont=font(10),
+                        ytickfont=font(10),
+                        titlefont=font(10),
+                        xticks = [minx, 0, maxx],
+                        yticks = [miny, 0, maxy],
+                        grid=false,
+                        backgroundcolor=128)
+            [plot_cell(extents[i], minPrs[i]) for i in 1:num_regions]
+            plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
+            savefig(plt_min, "$results_path/$base_str-min-heatmap.png")
+        end
 
         plt_verification = plot(aspect_ratio=1,
                                 size=(300,300), dpi=300,
@@ -318,10 +320,16 @@ function plot_gp_fields(results_path, dyn_fn)
     delta_y_gp = [y[i] - predict_y(gp_x2, hcat([x[i], y[i]]))[1][1] for i in 1:length(x)]
     u_gp = delta_x_gp*0.5
     v_gp = delta_y_gp*0.5
-    plt1 = plot(size=(300,300), dpi=600, aspect_ratio=1, grid=false, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], xtickfont=font(10), ytickfont=font(10), titlefont=font(10))
+    plt1 = plot(size=(300,300), dpi=600, aspect_ratio=1, grid=false, foreground_color_border=:white, foreground_color_axis=:white, 
+                xlims = [minx, maxx], ylims = [miny, maxy],
+                xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], 
+                xtickfont=font(10), ytickfont=font(10), titlefont=font(10))
     plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="", linealpha=0.1)
     quiver!(x, y, quiver=(-u_gp, -v_gp), color=:black, linewidth=1.5)
-    plt2 = plot(size=(300,300), dpi=600, aspect_ratio=1, grid=false, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], xtickfont=font(10), ytickfont=font(10), titlefont=font(10))
+    plt2 = plot(size=(300,300), dpi=600, aspect_ratio=1, grid=false, foreground_color_border=:white, foreground_color_axis=:white,
+                xlims = [minx, maxx], ylims = [miny, maxy],
+                xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], 
+                xtickfont=font(10), ytickfont=font(10), titlefont=font(10))
     plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="", linealpha=0.1)
 
     u_true = 0.5*[x[i] - dyn_fn([x[i], y[i]])[1] for i in 1:length(x)] 
