@@ -6,4 +6,5 @@ using Test
     include("gptests.jl")
     include("dfatests.jl")
     include("systemtests.jl")
+    include("regiontests.jl")
 end

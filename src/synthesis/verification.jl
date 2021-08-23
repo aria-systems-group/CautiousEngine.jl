@@ -149,7 +149,7 @@ function general_label_fcn(state_extent, default_label, unsafe_label, labels_dic
     for label in keys(labels_dict) 
         for extent in labels_dict[label]
             flags = [sum(state_extent[dim])/2∈extent[dim] for dim in keys(extent)]
-            if sum(flags) == length(keys(extent))
+            if sum(flags) == extent.count 
                 state_label = label
                 @debug state_label
                 break

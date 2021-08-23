@@ -59,11 +59,11 @@ for (i, mode) in enumerate(unknown_mode_list)
 
     # If constructing the single-mode systems, run it! 
     if run_exps_flag
-        CautiousEngine.end_to_end_transition_bounds(experiment_params, single_mode_verification=true, reuse_regions_flag=false)
+        CautiousEngine.end_to_end_transition_bounds(experiment_params, reuse_gps_flag=false, reuse_regions_flag=false)
     end
 
     # Construct the directory where results will be
-    res_dir = CautiousEngine.create_experiment_directory(experiment_params)
+    res_dir = experiment_params.experiment_directory
     @info "Mode results can be found in $res_dir" 
     push!(res_dirs, res_dir)
 end

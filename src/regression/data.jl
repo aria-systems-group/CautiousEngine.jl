@@ -51,3 +51,15 @@ function generate_training_data(unknown_fn, domain::Dict, data_num::Int;
     return x_train, y_train
 end
 
+function save_training_data(x_train, y_train, exp_dir::String)
+    training_data = Dict()
+    training_data[:input] = x_train
+    training_data[:output] = y_train
+    bson("$exp_dir/training_data.bson", training_data)
+end
+
+function load_training_data(filename::String)
+    training_data = BSON.load(filename)
+    return training_data[:input], training_data[:output]
+end
+

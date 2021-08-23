@@ -37,6 +37,14 @@ function train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparamet
     return gp_set
 end
 
+function generate_gp_filename(params; filename_appendix=nothing)
+    gps_dir = @sprintf("%s/gps", params.experiment_directory)
+    !isdir(gps_dir) && mkpath(gps_dir)
+    gps_filename = @sprintf("%s-m%d-σ%1.3f-rs%d-gps", params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
+    gps_filename = isnothing(filename_appendix) ? gps_filename : "$gps_filename-$filename_appendix"
+    return "$gps_dir/$gps_filename.bin" 
+end
+
 function train_gp_1dim(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=false, lnoise=nothing, opt_fraction=1.0)
     m_prior = MeanZero()
     k_prior = SE(se_params[2], se_params[1])
@@ -64,26 +72,11 @@ end
 """
 Generate GP regression given the dataset.
 """
-function generate_estimates(params, x_train, y_train; reuse_gp_flag=false, filename_appendix=nothing)
-    exp_dir = create_experiment_directory(params)
-    # Generate a set of GPRs if none are provided.
-    gps_dir = @sprintf("%s/gps", exp_dir)
-    !isdir(gps_dir) && mkpath(gps_dir)
-    gps_filename = @sprintf("%s-m%d-σ%1.3f-rs%d-gps", params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
-    gps_filename = isnothing(filename_appendix) ? gps_filename : "$gps_filename-$filename_appendix"
-    local_gp_file = "$exp_dir/$gps_filename.bin"
+function generate_estimates(params, x_train, y_train)
     data_deps = params.system_params.dependency_dims
-
-    if isfile(local_gp_file) && reuse_gp_flag
-        @info "Resuing gp: " local_gp_file 
-        open(local_gp_file) do f
-            gp_set = deserialize(f)
-        end
-    else 
-        x_train_sub = x_train #[:, findall(.>(0), data_deps[out_dim])[:]]
-        optimize_hyperparameters = params.data_params.data_frac_optimize > 0. ? true : false
-        gp_set = train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=optimize_hyperparameters, lnoise=nothing, opt_fraction=params.data_params.data_frac_optimize)
-    end
+    x_train_sub = x_train #[:, findall(.>(0), data_deps[out_dim])[:]]
+    optimize_hyperparameters = params.data_params.data_frac_optimize > 0. ? true : false
+    gp_set = train_gps(x_train, y_train; se_params=[0., 0.65], optimize_hyperparameters=optimize_hyperparameters, lnoise=nothing, opt_fraction=params.data_params.data_frac_optimize)
 
     gp_info_dict = Dict()
     for dim_key in keys(data_deps) 
@@ -197,31 +190,28 @@ end
 """
 Save the GP info and objects.
 """
-function save_gp_info(params, gp_set, gp_info_dict; save_global_gps=true, filename_appendix=nothing)
-    exp_dir = create_experiment_directory(params)
-    if save_global_gps
-        gps_dir = @sprintf("%s/gps", params.experiment_directory)
-        !isdir(gps_dir) && mkpath(gps_dir)
-        gps_filename = @sprintf("%s/%s-m%d-σ%1.3f-rs%d-gps.bin", gps_dir, params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
-        # Save the GPs for further analysis. 
-        @info "Saving GP regressions to experiment directory..."
-        open(gps_filename, "w") do f
-            serialize(f, gp_set)
-        end
-    end
-   
+function save_gp_info(params, gp_set, gp_info_dict; filename_appendix=nothing)
+    exp_dir = params.experiment_directory 
+
     gp_save_info = Dict()
     gp_save_info[:gp_set] = gp_set
     gp_save_info[:gp_info] = gp_info_dict
 
-    local_gp_dir = "$exp_dir/gps"
-    !isdir(local_gp_dir) && mkpath(local_gp_dir)
-    gps_filename = @sprintf("%s-m%d-σ%1.3f-rs%d-gps", params.system_params.mode_tag, params.data_params.data_num, params.data_params.noise_sigma, params.random_seed)
-    gps_filename = isnothing(filename_appendix) ? gps_filename : "$gps_filename-$filename_appendix"
-    local_gp_file = "$local_gp_dir/$gps_filename.bin"
-    open(local_gp_file, "w") do f
+    gps_filename = generate_gp_filename(params, filename_appendix=filename_appendix)
+
+    # Save the GPs for further analysis. 
+    @info "Saving GP regressions to experiment directory..."
+    open(gps_filename, "w") do f
         serialize(f, gp_save_info)
     end
+end
+
+function load_gp_info(filename)
+    gp_save_info = nothing
+    open(filename, "r") do f
+        gp_save_info = deserialize(f)
+    end
+    return gp_save_info[:gp_set], gp_save_info[:gp_info]
 end
 
 """

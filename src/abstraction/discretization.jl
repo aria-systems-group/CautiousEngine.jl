@@ -3,9 +3,9 @@
 " Discretize a given extent into smaller extents with a grid size of delta.
 # Arguments
 - `set::Dict` - Set to discretize
-- `epsilon::Float64` - Size of the discretization
+- `grid_sizes::Dict` - Discretization delta for each component
 "
-function discretize_set(set, grid_sizes)
+function discretize_set(set::Dict, grid_sizes::Dict)
 
     extents = []
     for dim_key in keys(set)
@@ -32,15 +32,15 @@ end
 " Discretize a given extent into smaller extents with a grid size of delta.
 # Arguments
 - `set::Dict` - Set to discretize
-- `epsilon::Float64` - Size of the discretization
+- `grid_sizes::Dict` - Discretization delta for each component
 "
-function discretize_set_lazy(set, epsilon)
+function discretize_set_lazy(set::Dict, grid_sizes::Dict)
     # TODO: Generalize this for n-dimensions
     x = set["x1"]
     y = set["x2"]
 
-    x_epsilons = x[1]:epsilon["x1"]:x[2]
-    y_epsilons = y[1]:epsilon["x2"]:y[2]
+    x_epsilons = x[1]:grid_sizes["x1"]:x[2]
+    y_epsilons = y[1]:grid_sizes["x2"]:y[2]
 
     discrete_sets = Dict()
     discrete_extents = Dict()

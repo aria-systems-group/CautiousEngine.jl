@@ -1,3 +1,159 @@
+
+"""
+Generates transition bounds with the given parameters.
+"""
+function generate_transition_bounds(params, gp_info_dict, region_data; 
+                                    reuse_mats_flag=false) 
+
+    exp_dir = params.experiment_directory
+    region_dict = region_data[:extents]
+    region_post_dict = region_data[:posts]
+
+    tmat_filename = "$exp_dir/transition_mats.bson"
+    if !reuse_mats_flag || !isfile(tmat_filename)
+        @info "Calculating transition probability bounds between regions..."
+        minPr_mat, maxPr_mat = process(region_dict, region_post_dict, params.data_params.epsilon, gp_info_dict, params)
+    end
+
+    res_mats = Dict("minPr" => minPr_mat, "maxPr" => maxPr_mat)
+    return res_mats 
+end
+
+"""
+Generates transition bounds with the given parameters.
+"""
+function generate_transition_bounds(params, region_data; 
+                                    reuse_mats_flag=false) 
+
+    exp_dir = params.experiment_directory
+    region_dict = region_data[:extents]
+    region_post_dict = region_data[:posts]
+    region_gp_dict = region_data[:gps]
+
+    tmat_filename = "$exp_dir/transition_mats.bson"
+    if !reuse_mats_flag || !isfile(tmat_filename)
+        @info "Calculating transition probability bounds between regions..."
+        results_df = process_foo(region_dict, region_post_dict, region_gp_dict, params.data_params.epsilon, params)
+
+        # Save the matrices for use in MATLAB verification tool
+        num_states = region_dict.count
+        minPr_mat = spzeros(num_states, num_states)
+        maxPr_mat = spzeros(num_states, num_states)
+        for i = 1:1:num_states
+            sub_row = results_df[results_df.Set1 .== i, :]
+            if i == num_states
+                minPr_mat[i, i] = 1.
+                maxPr_mat[i, i] = 1.
+            else
+                for j = 1:1:num_states
+                    if j == num_states
+                        subsub_row = sub_row[sub_row.Set2 .== j, :]
+                        minPr_mat[i, j] = 1. - subsub_row.MaxPr[1]
+                        maxPr_mat[i, j] = 1. - subsub_row.MinPr[1]
+                    else
+                        subsub_row = sub_row[sub_row.Set2 .== j, :]
+                        minPr_mat[i, j] = subsub_row.MinPr[1]
+                        maxPr_mat[i, j] = subsub_row.MaxPr[1]
+                    end
+                end
+            end
+        end
+    end
+
+    res_mats = Dict("minPr" => minPr_mat, "maxPr" => maxPr_mat)
+    return res_mats 
+end
+
+function load_transition_matrices(filename)
+    res_mats = BSON.load(filename)
+    return res_mats
+end
+
+function save_transition_matrices(params, res_mats)
+    exp_dir = params.experiment_directory
+    tmat_filename = "$exp_dir/transition_mats.bson"
+    bson(tmat_filename, res_mats) 
+end
+
+function fetch_results(N, r)
+    results_df = DataFrame(Set1 = Int[], Set2 = Int[], MinPr = Float64[], MaxPr = Float64[], MinPrPoint = Array[], MaxPrPoint = Array[])
+    for j in 1:N
+        total_results = fetch(r[j])
+        push!(results_df, total_results)
+    end
+    return results_df 
+end
+
+function process(region_dict, region_post_dict, epsilon, gp_dict, params)
+    prod = Base.product(1:region_dict.count-1, 1:region_dict.count)
+    # N = length(prod)
+    # r = Array{Array, 1}(undef, N)
+
+    minPrs = spzeros(region_dict.count, region_dict.count)
+    maxPrs = spzeros(region_dict.count, region_dict.count)
+
+    # for (i, pair) in enumerate(prod)
+    #     res = region_pair_transitions(pair, region_dict, region_post_dict, epsilon, gp_dict, params)
+    #     if pair[2] == region_dict.count
+    #         minPrs[pair[1], pair[2]] = 1. - res[3]
+    #         maxPrs[pair[1], pair[2]] = 1. - res[4]
+    #     else
+    #         minPrs[pair[1], pair[2]] = res[3]
+    #         maxPrs[pair[1], pair[2]] = res[4]
+    #     end
+    # end
+
+    mean_dict = Dict()
+
+    for i=1:region_dict.count-1
+        region = region_dict[i]
+        mean_dict[i] = [mean(region[dim_key]) for dim_key in keys(region)] 
+    end
+
+    set_radius = sqrt(2)*params.discretization_step["x1"]
+
+    for i=1:region_dict.count-1
+        ϵ_crit = calculate_ϵ_crit(gp_dict, region_post_dict[i][2])
+        # calculate center of post image
+        post_image = region_post_dict[i][1]
+        mean_pt = [mean(post_image[dim_key]) for dim_key in keys(post_image)]
+        # TODO: This is not generalized
+        image_radius = sqrt((mean_pt[1] - post_image["x1"][1])^2 + (mean_pt[1] - post_image["x2"][1])^2) 
+        for j=1:region_dict.count-1
+            if fast_check(mean_pt, mean_dict[j], ϵ_crit, image_radius, set_radius)
+                res = region_pair_transitions((i,j), region_dict, region_post_dict, epsilon, gp_dict, params)
+            else
+                res = [i, j, 0., 0., [-1., -1.], [-11., -11.]]
+            end
+            minPrs[i, j] = res[3]
+            maxPrs[i, j] = res[4]
+        end
+
+        res = region_pair_transitions((i,region_dict.count), region_dict, region_post_dict, epsilon, gp_dict, params)
+        minPrs[i, region_dict.count] = 1. - res[3]
+        maxPrs[i, region_dict.count] = 1. - res[4]
+    end
+
+    minPrs[region_dict.count, :] .= 1.
+    maxPrs[region_dict.count, :] .= 1.
+   
+    # results_df = fetch_results(N, r)
+    return minPrs, maxPrs 
+end
+
+function process_foo(region_dict, region_post_dict, region_gp_dict, epsilon, params)
+    N = region_dict.count
+    r = Array{Array, 1}(undef, N)
+
+    for (i, pair) = enumerate(Base.product(1:N, 1:N))
+        i == N ? continue : nothing
+        r[i] = region_pair_transitions(pairs[i], region_dict, region_post_dict, epsilon, region_gp_dict[pairs[i][1]], params)
+    end
+
+    results_df = fetch_results(N, r)
+    return results_df
+end
+
 "Determine the set of states that will have non-zero transition probability upper bounds."
 function fast_check(mean_pt, mean_target, ϵ_crit, image_radius, set_radius)
     flag = norm(mean_pt - mean_target) < ϵ_crit + image_radius + set_radius
@@ -267,7 +423,7 @@ function point_region_transitions(μ::Dict, σ::Dict, target_region_idx, region_
 
     @assert maxPr_UB >= minPr_LB
 
-    if target_region_idx == length(keys(region_dict))
+    if target_region_idx == region_dict.count
         frame_row = [1-maxPr_UB, 1-minPr_LB, [shrink_ϵ, expand_ϵ]]
     else
         frame_row = [minPr_LB, maxPr_UB, [shrink_ϵ, expand_ϵ]]

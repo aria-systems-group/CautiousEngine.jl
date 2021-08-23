@@ -43,11 +43,11 @@ known_part = (x) -> [x[1], x[2]]                    # Known part of the dynamics
 exp_dir = global_exp_dir
 res_dirs = Array{String,1}()                        # Array that holds the single-mode result directories
 X = Dict("x1" => [-2., 2.], "x2" => [-2., 2.])      # Defines the compact safe set
-grid_sizes = Dict("x1" => 0.25, "x2" => 0.25)       # Specifies the discretization coarseness in each dimension
+grid_sizes = Dict("x1" => 0.125, "x2" => 0.125)       # Specifies the discretization coarseness in each dimension
 safety_dims = ["x1", "x2"]                          # Dimensions that have safety bounds
 dependency_dims = Dict("x1" => [1, 1],              # Defines dependencies on other states  
                        "x2" => [1, 1])
-number_of_datapoints = 10                           # Number of data points per mode to generate
+number_of_datapoints = 1000                           # Number of data points per mode to generate
 run_exps_flag = true                                # Set to true to rerun the single-mode constructions 
 m_opt = -1                                          # Unused
 bound_type = "rkhs-tight"                           # GP bound type 
@@ -68,11 +68,11 @@ for (i, mode) in enumerate(unknown_mode_list)
 
     # If constructing the single-mode systems, run it! 
     if run_exps_flag
-        CautiousEngine.end_to_end_transition_bounds(experiment_params, single_mode_verification=true, reuse_regions_flag=false)
+        CautiousEngine.end_to_end_transition_bounds(experiment_params, reuse_gps_flag=false, reuse_regions_flag=false)
     end
 
     # Construct the directory where results will be
-    res_dir = CautiousEngine.create_experiment_directory(experiment_params)
+    res_dir = experiment_params.experiment_directory
     @info "Mode results can be found in $res_dir" 
     push!(res_dirs, res_dir)
 end

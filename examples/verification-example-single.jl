@@ -51,8 +51,8 @@ system_params = SystemParameters(system, f, known_part, measurement_noise_dist, 
 data_params = DataParameters(number_of_datapoints, m_opt, bound_type, σ_proc, epsilon, eta, safety_dims, -1., -1.)
 experiment_params = ExperimentParameters(exp_dir, experiment_type, specification_file, X, grid_sizes, "foo", random_seed, system_params, data_params)
 
-_, _, trans_mats = CautiousEngine.end_to_end_transition_bounds(experiment_params, single_mode_verification=true, reuse_regions_flag=true)
-results_path = CautiousEngine.create_experiment_directory(experiment_params)
+_, trans_mats = CautiousEngine.end_to_end_transition_bounds(experiment_params, reuse_gps_flag=true, reuse_regions_flag=true)
+results_path = experiment_params.experiment_directory
 
 #======================================================================================================
 2.  Construct the IMDP Labels and call the appropriate verification solver wrapper. 

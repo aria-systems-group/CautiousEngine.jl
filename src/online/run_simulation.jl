@@ -89,7 +89,7 @@ function propogate_pimdp_trajectory(pimdp, dfa, extent_dict, x_new)
 
     if isnothing(new_extent)
         qnew = dfa.sink_state
-        new_extent = length(keys(extent_dict)) 
+        new_extent = region_dict.count
     else
         qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[new_extent])
     end
@@ -112,7 +112,7 @@ function get_imdp_state_id(extent_dict, x_new)
     end
 
     if isnothing(new_extent)
-        new_extent = length(keys(extent_dict))
+        new_extent = region_dict.count
     end
     return new_extent
 end
@@ -133,7 +133,7 @@ function propogate_pimdp_trajectory_test(pimdp, dfa, extent_dict, x_new)
 
     if isnothing(new_extent)
         qnew = dfa.sink_state
-        new_extent = length(keys(extent_dict)) 
+        new_extent = region_dict.count
     else
         qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[new_extent])
     end
