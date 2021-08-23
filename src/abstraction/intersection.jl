@@ -75,9 +75,9 @@ end
 
 " Gets the principal normals of each shape.
 # Arguments
-- `shapes::Vector{Dict{Any, Any}}` - Array with shape dictionaries
+- `shapes::Vector` - Vector with shape definitions 
 "
-function get_axes(shapes::Vector{Dict{Any, Any}})
+function get_axes(shapes::Vector)
     axes = []
     for shape in shapes
         num_v = length(shape["vertices"])
