@@ -123,8 +123,13 @@ function process(region_dict, region_post_dict, epsilon, gp_dict, params)
         maxPrs[i, region_dict.count] = 1. - res[3]
     end
 
-    minPrs[region_dict.count, :] .= 1.
-    maxPrs[region_dict.count, :] .= 1.
+    minPrs[region_dict.count, region_dict.count] = 1.0
+    maxPrs[region_dict.count, region_dict.count] = 1.0
+
+    for (minrow, maxrow) in zip(eachrow(minPrs), eachrow(maxPrs))
+        @assert sum(maxrow) >= 1
+        @assert sum(minrow) <= 1
+    end
    
     return minPrs, maxPrs 
 end

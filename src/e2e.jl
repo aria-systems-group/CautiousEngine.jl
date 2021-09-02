@@ -4,6 +4,28 @@
 5. An easy to plot visualization, separate from these functions
 ==#
 
+"""
+Performs k-step refinement over uncertain states according to safety verification.
+"""
+function safety_based_refinement(experiment_params::ExperimentParameters, results_path::String, verification_mat, refinement_steps::Int; 
+                                 safety_threshold=0.95, horizon=1, reuse_regions_flag=false, reuse_transition_mats_flag=false)
+
+    working_dir = results_path
+    refinement_result_dirs = []
+
+    for i=1:refinement_steps
+        results_dir = "$results_path/r$i"
+        states_to_update = findall(x->x<safety_threshold, verification_mat[1:end,3]) ∩ findall(x->x>safety_threshold, verification_mat[1:end,4])  
+        imdp = refine_imdp(states_to_update, experiment_params, working_dir=working_dir, results_dir=results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
+        verification_mat = Globally(imdp, "safe", horizon, "$results_dir/imdp-r$i.txt")
+        save_legacy_mats(verification_mat, results_dir, horizon)
+        working_dir = results_dir 
+        push!(refinement_result_dirs, results_dir)
+    end
+
+    return refinement_result_dirs
+end
+
 function end_to_end_transition_bounds(params; reuse_gps_flag=false, reuse_regions_flag=false) 
     
 	@info "Initializing experiment and saving the parameters..."

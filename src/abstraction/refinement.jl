@@ -15,7 +15,7 @@ function refine_imdp(states_to_refine, params::ExperimentParameters;
     end
 
     if isnothing(results_dir)
-        results_dir = "$exp_dir/refined"
+        results_dir = "$experiment_dir/refined"
     end
     !isdir(results_dir) && mkdir(results_dir)
 
@@ -76,6 +76,8 @@ function refine_imdp(states_to_refine, params::ExperimentParameters;
     @label reuse_transition_mats
     # Rebuild the IMDP through rebuilding the matrices
     new_imdp = create_simple_imdp(transition_mats["minPr"], transition_mats["maxPr"])
+
+    validate_pimdp(new_imdp)
 
     if !isnothing(label_fcn)
         create_imdp_labels(label_fcn, new_imdp, new_extent_dict)
