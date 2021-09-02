@@ -57,3 +57,35 @@ function discretize_set_lazy(set::Dict, grid_sizes::Dict)
     end
     return discrete_sets, discrete_extents
 end
+
+" Refine a discrete state uniformly and update the region info dict.
+# Arguments
+- `region_id::Int` - Region id to refine 
+- `region_info_dict:Dict` - Dictionary containing all of the region info
+"
+function uniform_refinement(region_id, extent_dict)
+    extent = extent_dict[region_id]
+    delta_dict = Dict()
+    for dim in keys(extent)
+        delta_dict[dim] = (extent[dim][2] - extent[dim][1])/2
+    end
+
+    refined_sets = discretize_set(extent_dict[region_id], delta_dict)
+
+    # ! Does ordering matter? I don't think it should
+    N_old = maximum(keys(extent_dict))
+    last_extent = extent_dict[N_old]
+
+    # Remove old state
+    pop!(extent_dict, region_id)
+    new_keys = []
+    for i=1:refined_sets.count
+        new_key = N_old + i - 1 
+        extent_dict[N_old + i - 1] = refined_sets[i]
+        new_keys = new_keys ∪ [new_key]
+    end
+
+    extent_dict[N_old + refined_sets.count + 1] = last_extent
+
+    return extent_dict, new_keys
+end

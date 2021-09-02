@@ -37,6 +37,7 @@ include("abstraction/discretization.jl")
 include("abstraction/images.jl")
 include("abstraction/intersection.jl")
 include("abstraction/regions.jl")
+include("abstraction/refinement.jl")
 
 include("imdp/dfa.jl")
 include("imdp/imdp.jl")

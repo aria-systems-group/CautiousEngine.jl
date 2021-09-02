@@ -69,10 +69,14 @@ function load_transition_matrices(filename)
     return res_mats
 end
 
-function save_transition_matrices(params, res_mats)
+function save_transition_matrices(params::ExperimentParameters, res_mats::Dict)
     exp_dir = params.experiment_directory
     tmat_filename = "$exp_dir/transition_mats.bson"
-    bson(tmat_filename, res_mats) 
+    save_transition_matrices(res_mats, tmat_filename) 
+end
+
+function save_transition_matrices(res_mats::Dict, filename::String)
+    bson(filename, res_mats) 
 end
 
 function fetch_results(N, r)
@@ -85,26 +89,11 @@ function fetch_results(N, r)
 end
 
 function process(region_dict, region_post_dict, epsilon, gp_dict, params)
-    prod = Base.product(1:region_dict.count-1, 1:region_dict.count)
-    # N = length(prod)
-    # r = Array{Array, 1}(undef, N)
 
     minPrs = spzeros(region_dict.count, region_dict.count)
     maxPrs = spzeros(region_dict.count, region_dict.count)
 
-    # for (i, pair) in enumerate(prod)
-    #     res = region_pair_transitions(pair, region_dict, region_post_dict, epsilon, gp_dict, params)
-    #     if pair[2] == region_dict.count
-    #         minPrs[pair[1], pair[2]] = 1. - res[3]
-    #         maxPrs[pair[1], pair[2]] = 1. - res[4]
-    #     else
-    #         minPrs[pair[1], pair[2]] = res[3]
-    #         maxPrs[pair[1], pair[2]] = res[4]
-    #     end
-    # end
-
     mean_dict = Dict()
-
     for i=1:region_dict.count-1
         region = region_dict[i]
         mean_dict[i] = [mean(region[dim_key]) for dim_key in keys(region)] 
@@ -130,14 +119,13 @@ function process(region_dict, region_post_dict, epsilon, gp_dict, params)
         end
 
         res = region_pair_transitions((i,region_dict.count), region_dict, region_post_dict, epsilon, gp_dict, params)
-        minPrs[i, region_dict.count] = 1. - res[3]
-        maxPrs[i, region_dict.count] = 1. - res[4]
+        minPrs[i, region_dict.count] = 1. - res[4]
+        maxPrs[i, region_dict.count] = 1. - res[3]
     end
 
     minPrs[region_dict.count, :] .= 1.
     maxPrs[region_dict.count, :] .= 1.
    
-    # results_df = fetch_results(N, r)
     return minPrs, maxPrs 
 end
 

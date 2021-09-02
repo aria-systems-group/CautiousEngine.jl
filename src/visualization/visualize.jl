@@ -139,7 +139,7 @@ function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, m
     end
 end
 
-function plot_2d_verification_results(results_path;num_dfa_states=1, min_threshold=0.95, extents_dict=Dict(), extents_labels_colors=Dict(), prob_plots=false, lazy_flag=false)
+function plot_2d_verification_results(results_path;num_dfa_states=1, min_threshold=0.95, extents_dict=Dict(), extents_labels_colors=Dict(), prob_plots=false, lazy_flag=false, plot_tag="", state_outlines_flag=false)
     extents, _ = deserialize_region_data("$results_path/regions.bson", lazy_flag=lazy_flag)
     num_regions = extents.count - 1 
     X = extents[extents.count]
@@ -169,9 +169,9 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
                         xticks = [minx, 0, maxx],
                         yticks = [miny, 0, maxy],
                         grid=false)
-            [plot_cell(extents[i], maxPrs[i]) for i in 1:num_regions]
+            [plot_cell(extents[i], maxPrs[i], state_outlines_flag=state_outlines_flag) for i in 1:num_regions]
             plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-            savefig(plt_max, "$results_path/$base_str-max-heatmap.png")
+            savefig(plt_max, "$results_path/$base_str$plot_tag-max-heatmap.png")
 
             # Plot the minimum probabilities 
             plt_min = plot(aspect_ratio=1,
@@ -184,9 +184,9 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
                         yticks = [miny, 0, maxy],
                         grid=false,
                         backgroundcolor=128)
-            [plot_cell(extents[i], minPrs[i]) for i in 1:num_regions]
+            [plot_cell(extents[i], minPrs[i], state_outlines_flag=state_outlines_flag) for i in 1:num_regions]
             plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-            savefig(plt_min, "$results_path/$base_str-min-heatmap.png")
+            savefig(plt_min, "$results_path/$base_str$plot_tag-min-heatmap.png")
         end
 
         plt_verification = plot(aspect_ratio=1,
@@ -201,7 +201,7 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
                                 backgroundcolor=128)
 
         # Plot the cells
-        [plot_cell_verify(extents[i], minPrs[i], maxPrs[i], min_threshold) for i in 1:num_regions]
+        [plot_cell_verify(extents[i], minPrs[i], maxPrs[i], min_threshold, state_outlines_flag=state_outlines_flag) for i in 1:num_regions]
         plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
 
         # Plot extents with labels
@@ -212,7 +212,7 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
             end
         end
 
-        savefig(plt_verification, "$results_path/$base_str-verification.png")
+        savefig(plt_verification, "$results_path/$base_str$plot_tag-verification.png")
     end
 end
 
@@ -229,27 +229,30 @@ end
 """
 Plot a cell with alpha associated with probability value
 """
-function plot_cell(extent, prob_value)
+function plot_cell(extent, prob_value; state_outlines_flag=false)
     x = [extent["x1"][1], extent["x1"][1], extent["x1"][2], extent["x1"][2]]
     y = [extent["x2"][1], extent["x2"][2], extent["x2"][2], extent["x2"][1]]
     shape = Plots.Shape(x, y)
-    plot!(shape, color=:black, fillalpha=1-prob_value, linealpha=0.0, foreground_color_border=:white, foreground_color_axis=:white, label="")
+    linealpha = state_outlines_flag ? 1.0 : 0.0
+    plot!(shape, color=:black, fillalpha=1-prob_value, linewidth=1, linecolor=:black, linealpha=linealpha, foreground_color_border=:white, foreground_color_axis=:white, label="")
 end
 
 """
 Determine the cell color based on the verification probability threshold.
 """
-function plot_cell_verify(extent, min_prob_value, max_prob_value, threshold)
+function plot_cell_verify(extent, min_prob_value, max_prob_value, threshold; state_outlines_flag=false)
     x = [extent["x1"][1], extent["x1"][1], extent["x1"][2], extent["x1"][2]]
     y = [extent["x2"][1], extent["x2"][2], extent["x2"][2], extent["x2"][1]]
     shape = Plots.Shape(x, y)
 
+    linealpha = state_outlines_flag ? 1.0 : 0.0
+
     if min_prob_value >= threshold
-        plot!(shape, color=:purple, fillalpha=0.10, linealpha=0.0, foreground_color_border=:white, foreground_color_axis=:white, label="")
+        plot!(shape, color=:purple, fillalpha=0.10, linewidth=1, linecolor=:black, linealpha=linealpha, foreground_color_border=:white, foreground_color_axis=:white, label="")
     elseif max_prob_value < threshold
-        plot!(shape, color=:purple, fillalpha=0.99, linealpha=0.0, foreground_color_border=:white, foreground_color_axis=:white, label="")
+        plot!(shape, color=:purple, fillalpha=0.99, linewidth=1, linecolor=:black, linealpha=linealpha, foreground_color_border=:white, foreground_color_axis=:white, label="")
     else
-        plot!(shape, color=:purple, fillalpha=0.50, linealpha=0.0, foreground_color_border=:white, foreground_color_axis=:white, label="")
+        plot!(shape, color=:purple, fillalpha=0.50, linewidth=1, linecolor=:black, linealpha=linealpha, foreground_color_border=:white, foreground_color_axis=:white, label="")
     end
 end
 
