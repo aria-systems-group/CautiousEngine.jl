@@ -14,12 +14,49 @@ function safety_based_refinement(experiment_params::ExperimentParameters, result
     refinement_result_dirs = []
 
     for i=1:refinement_steps
-        results_dir = "$results_path/r$i"
+        results_dir = "$results_path/refinement$i"
         states_to_update = findall(x->x<safety_threshold, verification_mat[1:end,3]) ∩ findall(x->x>safety_threshold, verification_mat[1:end,4])  
         imdp = refine_imdp(states_to_update, experiment_params, working_dir=working_dir, results_dir=results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
         verification_mat = Globally(imdp, "safe", horizon, "$results_dir/imdp-r$i.txt")
         save_legacy_mats(verification_mat, results_dir, horizon)
         working_dir = results_dir 
+        push!(refinement_result_dirs, results_dir)
+    end
+
+    return refinement_result_dirs
+end
+
+"""
+Performs k-step refinement over uncertain states according to minimum spec satisfaction from synthesis.
+"""
+function spec_based_refinement(experiment_params_array, system_paths::Array{String,1}, results_path::String, 
+                               system_tag::String, label_fcn, refinement_steps::Int; 
+                               minimum_threshold=0.80, horizon=-1, reuse_regions_flag=false, reuse_transition_mats_flag=false)
+
+    
+    refinement_result_dirs = []
+
+    # Perform the synthesis procedure. Results found in `synth_dir`
+    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, results_path, system_tag, experiment_params_array[1].specification_file, label_fcn; 
+                                                                 add_opt=true,)
+                                                                 
+    working_dir = res_dir
+
+    for i=1:refinement_steps
+        results_dir = "$results_path/refinement$i"
+        states_to_update = Int.(pimdp_col_to_imdp_state.(findall(x->x<minimum_threshold, res_mat[1:end-1,3]) ∩ findall(x->x>minimum_threshold, res_mat[1:end-1,4]), 3))
+
+        new_imdp_dirs = Array{String,1}()
+        # For each IMDP in the system
+        for (j, component_dir) in enumerate(system_paths)
+            imdp_results_dir = "$results_dir/mode$j"
+            refine_imdp(states_to_update, experiment_params_array[j], working_dir=component_dir, results_dir=imdp_results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
+            push!(new_imdp_dirs, imdp_results_dir)
+        end
+       
+        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; 
+                                                                     add_opt=true,)
+        system_paths = new_imdp_dirs
         push!(refinement_result_dirs, results_dir)
     end
 

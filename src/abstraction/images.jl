@@ -9,21 +9,7 @@ function generate_region_images(params::ExperimentParameters, gp_info_dict::Dict
 
 	# Minimum and maximum extents
 	domain = params.domain
-    # TODO: put this in a different fcn?
-	min_ex = [domain[dim_key][1] for dim_key in keys(domain)]
-	max_ex = [domain[dim_key][2] for dim_key in keys(domain)]
-	mx = zeros(2,1)
-	mx[1] = max_ex[1]*1.1
-	mx[2] = max_ex[2]*1.1
-	# Store the predicted mean and covariance for each sampled point 
-	dim_keys = keys(domain)
-	σ_ubs = Dict()
-
-	# Calculate GP UBs
-	for dim_key in dim_keys
-		σ_ubs[dim_key] = 1.1*sqrt(predict_f(gp_info_dict[dim_key].gp, mx)[2][1])
-	end
-
+    σ_ubs = calculate_σ_global_bounds(domain, gp_info_dict)
     # TODO: Handle this flag better
 	# σ_ubs = nothing
 	
@@ -105,6 +91,24 @@ function generate_region_images(params::ExperimentParameters, x_train::AbstractA
     end
 
     return region_data
+end
+
+function calculate_σ_global_bounds(domain, gp_info_dict)
+    min_ex = [domain[dim_key][1] for dim_key in keys(domain)]
+    max_ex = [domain[dim_key][2] for dim_key in keys(domain)]
+    mx = zeros(2,1)
+    mx[1] = max_ex[1]*1.1
+    mx[2] = max_ex[2]*1.1
+    # Store the predicted mean and covariance for each sampled point 
+    dim_keys = keys(domain)
+    σ_ubs = Dict()
+
+    # Calculate GP UBs
+    for dim_key in dim_keys
+        σ_ubs[dim_key] = 1.1*sqrt(predict_f(gp_info_dict[dim_key].gp, mx)[2][1])
+    end
+
+    return σ_ubs
 end
 
 " Generate overapproximations of posterior mean and covariance functions using one of several methods.

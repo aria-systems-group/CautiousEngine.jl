@@ -17,7 +17,7 @@ function refine_imdp(states_to_refine, params::ExperimentParameters;
     if isnothing(results_dir)
         results_dir = "$experiment_dir/refined"
     end
-    !isdir(results_dir) && mkdir(results_dir)
+    !isdir(results_dir) && mkpath(results_dir)
 
     tmat_filename = "$results_dir/transition_mats.bson"
     # ! Transition matrices being saved incorrectly. Not able to reload.
@@ -50,8 +50,8 @@ function refine_imdp(states_to_refine, params::ExperimentParameters;
     # Generate new posterior bounds
     Threads.@threads for new_id in new_region_ids
         # TODO: Add a check here for "small enough" covariance bounds, and just update mean if is
-        # TODO: Add way to do the fast extent bounding
-        post_data[new_id] = bound_extent(extents[new_id], gp_info, params.system_params.dependency_dims)
+        σ_ubs = calculate_σ_global_bounds(params.domain, gp_info)
+        post_data[new_id] = bound_extent(extents[new_id], gp_info, params.system_params.dependency_dims, known_component=params.system_params.known_dynamics_fcn, σ_ubs=σ_ubs)
     end
 
     # Fix the extent ids to correspond to order
