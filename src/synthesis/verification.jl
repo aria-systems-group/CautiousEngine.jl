@@ -1,4 +1,4 @@
-function BoundedUntil(imdp, phi1, phi2, k, imdp_filepath)
+function BoundedUntil(imdp, phi1, phi2, k, imdp_filepath; synthesis_flag=false)
 
     labels_vector = Array{String}(undef, length(imdp.states))
     for label_key in keys(imdp.labels)
@@ -14,22 +14,25 @@ function BoundedUntil(imdp, phi1, phi2, k, imdp_filepath)
     # Write them to the file
     write_imdp_to_file_bounded(imdp, Qyes, Qno, imdp_filepath)
 
+    mode1 = synthesis_flag ? "maximize" : "minimize"
     # Do verification 
     if !isnothing(phi1)
-        result_mat = run_bounded_imdp_verification(imdp_filepath, k)
+        result_mat = run_bounded_imdp_verification(imdp_filepath, k, mode1=mode1)
+    elseif synthesis_flag
+        result_mat = run_imdp_synthesis(imdp_filepath, k; ep=1e-6, mode1="maximize", mode2="pessimistic", save_mats=true)
     else
-        result_mat = run_imdp_synthesis(imdp_filepath, k; ep=1e-6, mode1="maximize", mode2="optimistic", save_mats=true)
+        result_mat = run_imdp_synthesis(imdp_filepath, k; ep=1e-6, mode1="minimize", mode2="pessimistic", save_mats=true)
     end
         # Done-zoe
     return result_mat 
 end
 
-function Globally(imdp, phi, k, imdp_filepath)
+function Globally(imdp, phi, k, imdp_filepath; synthesis_flag=false)
 
     phi1 = nothing
     phi2 = "!$phi"
 
-    result_mat = BoundedUntil(imdp, phi1, phi2, k, imdp_filepath)
+    result_mat = BoundedUntil(imdp, phi1, phi2, k, imdp_filepath, synthesis_flag=synthesis_flag)
     safety_result_mat = zeros(size(result_mat))
     safety_result_mat[:, 1] = result_mat[:, 1]
     safety_result_mat[:, 2] = result_mat[:, 2]
@@ -42,7 +45,8 @@ end
 Call the synthesis tool with the given parameters.
 """
 function run_imdp_synthesis(imdp_file, k; ep=1e-6, mode1="maximize", mode2="pessimistic", save_mats=true)
-    exe_path = "synthesis"  # Assumes that this program is on the user's path
+    exe_path = "/usr/local/bin/synthesis"  # Assumes that this program is on the user's path
+    @assert isfile(imdp_file)
     res = read(`$exe_path $mode1 $mode2 $k 0.000001 $imdp_file`, String)
     filter_res = replace(res, "\n"=>" ")
     res_split = split(filter_res)
@@ -66,8 +70,8 @@ end
 """
 Call the synthesis tool to perform verification on a bounded horizon.
 """
-function run_bounded_imdp_verification(imdp_file, k)
-    res_mat = run_imdp_synthesis(imdp_file, k, mode1="minimize", mode2="pessimistic")
+function run_bounded_imdp_verification(imdp_file, k; mode1="minimize")
+    res_mat = run_imdp_synthesis(imdp_file, k, mode1=mode1, mode2="pessimistic")
     return res_mat
 end
 

@@ -26,6 +26,46 @@ function safety_based_refinement(experiment_params::ExperimentParameters, result
     return refinement_result_dirs
 end
 
+function safety_based_synthesis(experiment_params_array, system_paths::Array{String,1}, results_path::String, 
+    system_tag::String, label_fcn, refinement_steps::Int; 
+    minimum_threshold=0.80, horizon=-1, reuse_regions_flag=false, reuse_transition_mats_flag=false) 
+
+    exp_dir = results_path
+
+    synth_dir = "$results_path/safety"
+    synthesis_mat, results_path, _ = perform_synthesis_from_result_dirs_safety(system_paths, exp_dir, system_tag, label_fcn); 
+    save_legacy_mats(synthesis_mat, synth_dir, horizon)
+
+    refinement_result_dirs = []
+
+    for i=1:refinement_steps
+        results_dir = "$results_path/refinement$i"
+        states_to_update = findall(x->x<minimum_threshold, synthesis_mat[1:end,3]) ∩ findall(x->x>minimum_threshold, synthesis_mat[1:end,4])  
+
+        new_imdp_dirs = Array{String,1}()
+        # For each IMDP in the system
+        for (j, component_dir) in enumerate(system_paths)
+            imdp_results_dir = "$results_dir/mode$j"
+            refine_imdp(states_to_update, experiment_params_array[j], working_dir=component_dir, results_dir=imdp_results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
+            push!(new_imdp_dirs, imdp_results_dir)
+        end
+        # imdp = refine_imdp(states_to_update, experiment_params, working_dir=working_dir, results_dir=results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
+
+        synth_dir = "$results_dir/safety"
+        !isdir(synth_dir) && mkpath(synth_dir)
+        cp("$results_dir/mode1/regions.bson", "$results_dir/safety/regions.bson", force=true)
+
+        synthesis_mat, _, _ = perform_synthesis_from_result_dirs_safety(new_imdp_dirs, exp_dir, system_tag, label_fcn; horizon=horizon); 
+
+        save_legacy_mats(synthesis_mat, synth_dir, horizon)
+
+        system_paths = new_imdp_dirs
+        push!(refinement_result_dirs, synth_dir)
+    end
+
+    return refinement_result_dirs
+end
+
 """
 Performs k-step refinement over uncertain states according to minimum spec satisfaction from synthesis.
 """
@@ -37,14 +77,24 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
     refinement_result_dirs = []
 
     # Perform the synthesis procedure. Results found in `synth_dir`
-    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, results_path, system_tag, experiment_params_array[1].specification_file, label_fcn; 
-                                                                 add_opt=true,)
-                                                                 
-    working_dir = res_dir
+    @info "Creating the IMDP..."
+    synth_dir = "$results_path/safety-specification"
+    imdp = create_imdp_from_result_dirs(system_paths, synth_dir)    
+    # Copy the region data
+    cp("$synth_dir/switched-system/regions.bson", "$synth_dir/regions.bson", force=true)
+    region_specific = "" 
+    regions_file = @sprintf("%s/regions%s.bson", system_paths[1], region_specific)
+    create_imdp_labels(label_fcn, imdp, regions_file)
+
+    # res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; 
+    #                                                              add_opt=true,)
+
+    res_mat = Globally(imdp, "safe", horizon, "$synth_dir/imdp.txt")
+    save_legacy_mats(res_mat, synth_dir, horizon)
 
     for i=1:refinement_steps
         results_dir = "$results_path/refinement$i"
-        states_to_update = Int.(pimdp_col_to_imdp_state.(findall(x->x<minimum_threshold, res_mat[1:end-1,3]) ∩ findall(x->x>minimum_threshold, res_mat[1:end-1,4]), 3))
+        states_to_update = unique(Int.(pimdp_col_to_imdp_state.(findall(x->x<minimum_threshold, res_mat[1:end-1,3]) ∩ findall(x->x>minimum_threshold, res_mat[1:end-1,4]), 2))) # ! TODO: FIX THIS
 
         new_imdp_dirs = Array{String,1}()
         # For each IMDP in the system
@@ -54,10 +104,19 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
             push!(new_imdp_dirs, imdp_results_dir)
         end
        
+        @info "Creating the IMDP..."
+        synth_dir = "$results_dir/safety-specification"
+	    imdp = create_imdp_from_result_dirs(new_imdp_dirs, synth_dir)    
+        # Copy the region data
+        cp("$synth_dir/switched-system/regions.bson", "$synth_dir/regions.bson", force=true)
+        region_specific = "" 
+	    regions_file = @sprintf("%s/regions%s.bson", new_imdp_dirs[1], region_specific)
+	    create_imdp_labels(label_fcn, imdp, regions_file)
+
         res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; 
                                                                      add_opt=true,)
         system_paths = new_imdp_dirs
-        push!(refinement_result_dirs, results_dir)
+        push!(refinement_result_dirs, synth_dir) 
     end
 
     return refinement_result_dirs
@@ -194,8 +253,51 @@ function end_to_end_transition_bounds_local_gps(params; single_mode_verification
     return timing_info, safety_result_mat, result_mats
 end
 
+function perform_synthesis_from_result_dirs_safety(res_dirs, exp_dir, system_tag, label_fcn; 
+	plot_graphs=true, rerun_flag=false, modes=nothing, add_opt=true,
+	region_specific="", num_sims=10, sim_points=nothing, horizon=-1)
+
+    @info "Creating the IMDP..."
+	imdp = create_imdp_from_result_dirs(res_dirs, "$exp_dir")    
+    @info("$exp_dir")
+	regions_file = @sprintf("%s/regions%s.bson", res_dirs[1], region_specific)
+	create_imdp_labels(label_fcn, imdp, regions_file)
+	plot_graphs ? create_dot_graph(imdp, "$exp_dir/imdp.gv") : nothing
+
+	# res_mat = run_pimdp_synthesis(pimdp, pimdp_filename, add_opt=add_opt)
+    imdp_filename = "$exp_dir/imdp.txt"
+    res_mat = CautiousEngine.Globally(imdp, "safe", horizon, imdp_filename, synthesis_flag=true)
+
+    if add_opt
+        @info "Synthesizing a controller... (maximize optimistic)"
+        res_mat_opt = run_imdp_synthesis(imdp_filename, horizon, mode2="optimistic", save_mats=false)
+        for j in 1:length(res_mat[:,1])
+            if res_mat[j, 3] == res_mat_opt[j,3] && res_mat_opt[j,4] > res_mat[j,4] 
+                res_mat[j, 2] = res_mat_opt[j,2]
+                res_mat[j, 4] = res_mat_opt[j,4] 
+            end
+        end
+    end
+
+    dst_dir = "$exp_dir/safety"
+	isdir(dst_dir) ? nothing : mkpath(dst_dir)
+	# Copy region data
+	sys_dir = res_dirs[1]
+	cp("$sys_dir/regions.bson", "$dst_dir/regions.bson", force=true)
+
+	# TODO Plot gamma values somewhere else, i.e. not here
+	# if add_opt
+	#     plot_gamma_value(dst_dir, res_mat, res_mat_opt, num_dfa_states=length(dfa.states))
+	# end
+	save_legacy_mats(res_mat, dst_dir, horizon)
+
+	# plot_results_from_file(dst_dir)
+	# plot_synthesis_results(dst_dir, res_mat, imdp, dfa, pimdp)
+    return res_mat, dst_dir, -1 
+end
+
 function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_file, label_fcn; 
-	plot_graphs=true, rerun_flag=false, modes=nothing, add_opt=false,
+	plot_graphs=false, rerun_flag=false, modes=nothing, add_opt=false,
 	region_specific="", num_sims=10, sim_points=nothing)
 
 	@info "Creating the IMDP..."

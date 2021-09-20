@@ -1,5 +1,4 @@
 /Manifest.toml
-/examples/synthesis-example
-/examples/verification-example
-/examples/verification-example-single
+/examples/synthesis-example*
+/examples/verification-example*
 *.bson

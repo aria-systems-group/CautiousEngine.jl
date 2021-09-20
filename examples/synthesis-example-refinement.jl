@@ -1,6 +1,7 @@
 using Distributions
 using Random
 using IntervalSets
+using SparseArrays
 
 using CautiousEngine
 
@@ -9,21 +10,21 @@ EXPERIMENT_DIR = @__DIR__
 experiment_type = "synthesis-example" 
 global_exp_dir = "$EXPERIMENT_DIR/$experiment_type/global"
 online_exp_dir = "$EXPERIMENT_DIR/$experiment_type/online"
-specification_file = "$EXPERIMENT_DIR/reach-avoid-specification.jl"
+specification_file = "foo"
 
 #======================================================================================================
 0. Define the Unknown Function, Process Noise, and the Full Dynamics Function
 ======================================================================================================#
 # Four control modes defined - g is the unknown function, f is the total (including known) dynamics fcn
 v = 0.5
-g1 = (x) -> [v + 0.1*sin(x[2]), 0.2*cos(x[1])]*0.5
-g2 = (x) -> [-v + 0.1*sin(x[2]), 0.2*cos(x[1])]*0.5
-g3 = (x) -> [0.2*cos(x[2]), v + 0.1*sin(x[1])]*0.5
-g4 = (x) -> [0.2*cos(x[2]), -v + 0.1*sin(x[1])]*0.5
+g1 = (x) -> [v + 0.1*sin(x[2]), 0.2*cos(x[1])]
+g2 = (x) -> [-v + 0.1*sin(x[2]), 0.2*cos(x[1])]
+g3 = (x) -> [0.2*cos(x[2]), v + 0.1*sin(x[1])]
+g4 = (x) -> [0.2*cos(x[2]), -v + 0.1*sin(x[1])]
 
 # Define the zero-mean process noise
 σ_proc = 0.01
-process_noise_dist = Normal(0., σ_proc)
+process_noise_dist = Truncated(Normal(0., σ_proc), -σ_proc, σ_proc)
 measurement_noise_dist = nothing                    # Measurement noise is only used in verification, not synthesis
 
 # Full dynamics function with four control modes
@@ -69,7 +70,7 @@ for (i, mode) in enumerate(unknown_mode_list)
     push!(params, experiment_params)
     # If constructing the single-mode systems, run it! 
     if run_exps_flag
-        CautiousEngine.end_to_end_transition_bounds(experiment_params, reuse_gps_flag=true, reuse_regions_flag=true)
+        CautiousEngine.end_to_end_transition_bounds(experiment_params, reuse_gps_flag=false, reuse_regions_flag=false)
     end
 
     # Construct the directory where results will be
@@ -81,18 +82,23 @@ end
 #======================================================================================================
 2.  Construct the product IMDP with the DFA, and synthesize a controller.
 ======================================================================================================#
-refinement_steps = 4
+refinement_steps = 4 
 synth_dir = exp_dir                                 # Specify where the synthesis result should be saved 
 !isdir(synth_dir) && mkdir(synth_dir)        
 
-default_label = "!a∧!b"                             # Default label of states
-unsafe_label = "!a∧b"                               # The label of unsafe states
-des_extents = [Dict("x1" => -1.0.. 1.0,             # List containing extents corresponding to a label 
-                    "x2" => -1.0.. 1.0)]
-labels_dict = Dict("a∧!b" => des_extents)           # Dictionary with key if label and value of corresponding extents 
+safe_extents = [Dict("x1" => -2.0.. 2.0,             # List containing extents corresponding to a label 
+                     "x2" => -2.0.. 2.0)]
+labels_dict = Dict("safe" => safe_extents)           # Dictionary with key if label and value of corresponding extents 
+default_label = "safe"
+unsafe_label = "!safe"
+
 # Wrapper function
 lbl = (state_extent; unsafe=false) -> general_label_fcn(state_extent, default_label, unsafe_label, labels_dict, unsafe=unsafe)
 system_tag = "synthesis-example-m$number_of_datapoints" # Tag for this example
-sim_points = [[-1.73; 1.73], [0.01; -1.63]]         # Optional, specify points to simulate the resulting policy
+# TODO: Change horizon
+horizon = 1 
+refinement_result_dirs = CautiousEngine.safety_based_synthesis(params, res_dirs, "$synth_dir/$system_tag", system_tag, lbl, refinement_steps, horizon=horizon)
 
-refine_res = CautiousEngine.spec_based_refinement(params, res_dirs, "$synth_dir/$system_tag", system_tag, lbl, refinement_steps)
+for res in refinement_result_dirs
+    CautiousEngine.plot_2d_verification_results(res, prob_plots=true, state_outlines_flag=true)
+end
