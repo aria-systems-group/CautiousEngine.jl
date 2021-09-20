@@ -24,10 +24,10 @@ using Plots
 # Lazy sets, the hot new way to work with polytopes
 using LazySets
 
-include("e2e.jl")
 include("metadata.jl")
 include("parameters.jl")
 include("validation.jl")
+include("e2e.jl")
 
 # My own packages
 include("GPBounding/GPBounding.jl")

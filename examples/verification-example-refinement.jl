@@ -66,13 +66,13 @@ for k in k_vals
     global imdp
     verification_result_mat = CautiousEngine.Globally(imdp, "safe", k, "$results_path/imdp.txt")
     CautiousEngine.save_legacy_mats(verification_result_mat, results_path, k)
-    CautiousEngine.plot_2d_verification_results(results_path, prob_plots=true)
+    CautiousEngine.plot_2d_verification_results(results_path, prob_plots=true, state_outlines_flag=true)
     working_dir = results_path
 
     # TODO: Reusing regions only works for a single instance of k. Handle this in a smarter way.
-    refine_result_dirs = CautiousEngine.safety_based_refinement(experiment_params, results_path, verification_result_mat, refinement_steps, horizon=k, reuse_regions_flag=true, reuse_transition_mats_flag=false)
+    refine_result_dirs = CautiousEngine.safety_based_refinement(experiment_params, results_path, verification_result_mat, refinement_steps, horizon=k, reuse_regions_flag=false, reuse_transition_mats_flag=false)
 
     for res in refine_result_dirs
-        CautiousEngine.plot_2d_verification_results(res, prob_plots=true, state_outlines_flag=false)
+        CautiousEngine.plot_2d_verification_results(res, prob_plots=true, state_outlines_flag=true)
     end
 end
