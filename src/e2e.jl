@@ -75,21 +75,11 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
 
     
     refinement_result_dirs = []
+    synth_dir = "$results_path/reach-specification"
+    !isdir(synth_dir) && mkpath(synth_dir)
 
-    # Perform the synthesis procedure. Results found in `synth_dir`
-    @info "Creating the IMDP..."
-    synth_dir = "$results_path/safety-specification"
-    imdp = create_imdp_from_result_dirs(system_paths, synth_dir)    
-    # Copy the region data
-    cp("$synth_dir/switched-system/regions.bson", "$synth_dir/regions.bson", force=true)
-    region_specific = "" 
-    regions_file = @sprintf("%s/regions%s.bson", system_paths[1], region_specific)
-    create_imdp_labels(label_fcn, imdp, regions_file)
+    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, results_path, system_tag, experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
 
-    # res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; 
-    #                                                              add_opt=true,)
-
-    res_mat = Globally(imdp, "safe", horizon, "$synth_dir/imdp.txt")
     save_legacy_mats(res_mat, synth_dir, horizon)
 
     for i=1:refinement_steps
@@ -104,17 +94,11 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
             push!(new_imdp_dirs, imdp_results_dir)
         end
        
-        @info "Creating the IMDP..."
-        synth_dir = "$results_dir/safety-specification"
-	    imdp = create_imdp_from_result_dirs(new_imdp_dirs, synth_dir)    
-        # Copy the region data
-        cp("$synth_dir/switched-system/regions.bson", "$synth_dir/regions.bson", force=true)
-        region_specific = "" 
-	    regions_file = @sprintf("%s/regions%s.bson", new_imdp_dirs[1], region_specific)
-	    create_imdp_labels(label_fcn, imdp, regions_file)
-
-        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; 
-                                                                     add_opt=true,)
+        # TODO: Fix file pathing to match
+        synth_dir = "$results_dir/reach-specification"
+        !isdir(synth_dir) && mkpath(synth_dir)
+        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
+        cp("$results_dir/$system_tag/switched-system/regions.bson", "$synth_dir/regions.bson", force=true)
         system_paths = new_imdp_dirs
         push!(refinement_result_dirs, synth_dir) 
     end
@@ -298,7 +282,7 @@ end
 
 function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_file, label_fcn; 
 	plot_graphs=false, rerun_flag=false, modes=nothing, add_opt=false,
-	region_specific="", num_sims=10, sim_points=nothing)
+	region_specific="", num_sims=10, sim_points=nothing, horizon=-1)
 
 	@info "Creating the IMDP..."
 	imdp = create_imdp_from_result_dirs(res_dirs, "$exp_dir/$system_tag")    
@@ -319,7 +303,7 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
 	plot_graphs ? create_dot_graph(pimdp, "$dst_dir/pimdp.gv") : nothing
 
 	pimdp_filename = "$dst_dir/pimdp.txt"
-	res_mat = run_pimdp_synthesis(pimdp, pimdp_filename, add_opt=add_opt)
+	res_mat = run_pimdp_synthesis(pimdp, pimdp_filename, add_opt=add_opt, horizon=horizon)
 
 	# Copy region data
 	sys_dir = res_dirs[1]
@@ -329,7 +313,7 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
 	# if add_opt
 	#     plot_gamma_value(dst_dir, res_mat, res_mat_opt, num_dfa_states=length(dfa.states))
 	# end
-	save_legacy_mats(res_mat, dst_dir, -1)
+	save_legacy_mats(res_mat, dst_dir, horizon)
 
 	# plot_results_from_file(dst_dir)
 	plot_synthesis_results(dst_dir, res_mat, imdp, dfa, pimdp)

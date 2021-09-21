@@ -87,7 +87,9 @@ function construct_DFA_IMDP_product(dfa, imdp)
     labels[dfa_acc_state:sizeQ:M*sizeQ] .= 1
 
     sink_labels = zeros(1, M*sizeQ)
-    sink_labels[dfa_sink_state:sizeQ:M*sizeQ] .= 1
+    if !isnothing(dfa_sink_state)
+        sink_labels[dfa_sink_state:sizeQ:M*sizeQ] .= 1
+    end
 
     pimdp = PIMDP(pimdp_states, imdp.actions, Pmin_new, Pmax_new, imdp.labels, labels, sink_labels, nothing, nothing, nothing, nothing)
     return pimdp 

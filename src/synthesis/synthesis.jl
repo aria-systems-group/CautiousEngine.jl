@@ -1,7 +1,7 @@
 """
 Run the PIMDP synthesis
 """
-function run_pimdp_synthesis(pimdp::PIMDP, pimdp_filename::String; add_opt=false)
+function run_pimdp_synthesis(pimdp::PIMDP, pimdp_filename::String; add_opt=false, horizon=-1)
     write_pimdp_to_file(pimdp, pimdp_filename)
 
     @info "Synthesizing a controller... (maximize pessimistic)"
@@ -11,7 +11,7 @@ function run_pimdp_synthesis(pimdp::PIMDP, pimdp_filename::String; add_opt=false
         @info "Synthesizing a controller... (maximize optimistic)"
         basename = pimdp_filename[1:end-3]
         opt_pimdp_filename = "$basename-optimistic.txt"
-        res_mat_opt = run_imdp_synthesis(pimdp_filename, -1, mode2="optimistic", save_mats=false)
+        res_mat_opt = run_imdp_synthesis(pimdp_filename, horizon, mode2="optimistic", save_mats=false)
         for j in 1:length(res_mat[:,1])
             if res_mat[j, 3] == res_mat_opt[j,3] && res_mat_opt[j,4] > res_mat[j,4] 
                 res_mat[j, 2] = res_mat_opt[j,2]
