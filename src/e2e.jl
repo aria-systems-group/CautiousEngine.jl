@@ -33,13 +33,13 @@ function safety_based_synthesis(experiment_params_array, system_paths::Array{Str
     exp_dir = results_path
 
     synth_dir = "$results_path/safety"
-    synthesis_mat, results_path, _ = perform_synthesis_from_result_dirs_safety(system_paths, exp_dir, system_tag, label_fcn); 
+    synthesis_mat, results_path, _ = perform_synthesis_from_result_dirs_safety(system_paths, synth_dir, system_tag, label_fcn); 
     save_legacy_mats(synthesis_mat, synth_dir, horizon)
 
     refinement_result_dirs = []
 
     for i=1:refinement_steps
-        results_dir = "$results_path/refinement$i"
+        results_dir = "$synth_dir/refinement$i"
         states_to_update = findall(x->x<minimum_threshold, synthesis_mat[1:end,3]) ∩ findall(x->x>minimum_threshold, synthesis_mat[1:end,4])  
 
         new_imdp_dirs = Array{String,1}()
@@ -49,18 +49,15 @@ function safety_based_synthesis(experiment_params_array, system_paths::Array{Str
             refine_imdp(states_to_update, experiment_params_array[j], working_dir=component_dir, results_dir=imdp_results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
             push!(new_imdp_dirs, imdp_results_dir)
         end
-        # imdp = refine_imdp(states_to_update, experiment_params, working_dir=working_dir, results_dir=results_dir, reuse_regions_flag=reuse_regions_flag, reuse_transition_mats_flag=reuse_transition_mats_flag)
 
-        synth_dir = "$results_dir/safety"
-        !isdir(synth_dir) && mkpath(synth_dir)
-        cp("$results_dir/mode1/regions.bson", "$results_dir/safety/regions.bson", force=true)
+        cp("$results_dir/mode1/regions.bson", "$results_dir/regions.bson", force=true)
 
-        synthesis_mat, _, _ = perform_synthesis_from_result_dirs_safety(new_imdp_dirs, exp_dir, system_tag, label_fcn; horizon=horizon); 
+        synthesis_mat, _, _ = perform_synthesis_from_result_dirs_safety(new_imdp_dirs, results_dir, system_tag, label_fcn; horizon=horizon); 
 
-        save_legacy_mats(synthesis_mat, synth_dir, horizon)
+        save_legacy_mats(synthesis_mat, results_dir, horizon)
 
         system_paths = new_imdp_dirs
-        push!(refinement_result_dirs, synth_dir)
+        push!(refinement_result_dirs, results_dir)
     end
 
     return refinement_result_dirs
@@ -75,15 +72,15 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
 
     
     refinement_result_dirs = []
-    synth_dir = "$results_path/reach-specification"
+    synth_dir = "$results_path/$system_tag/reach-specification"
     !isdir(synth_dir) && mkpath(synth_dir)
 
-    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, results_path, system_tag, experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
+    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, synth_dir, "", experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
 
     save_legacy_mats(res_mat, synth_dir, horizon)
 
     for i=1:refinement_steps
-        results_dir = "$results_path/refinement$i"
+        results_dir = "$synth_dir/refinement$i"
         states_to_update = unique(Int.(pimdp_col_to_imdp_state.(findall(x->x<minimum_threshold, res_mat[1:end-1,3]) ∩ findall(x->x>minimum_threshold, res_mat[1:end-1,4]), 2))) # ! TODO: FIX THIS
 
         new_imdp_dirs = Array{String,1}()
@@ -94,13 +91,10 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
             push!(new_imdp_dirs, imdp_results_dir)
         end
        
-        # TODO: Fix file pathing to match
-        synth_dir = "$results_dir/reach-specification"
-        !isdir(synth_dir) && mkpath(synth_dir)
-        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, system_tag, experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
-        cp("$results_dir/$system_tag/switched-system/regions.bson", "$synth_dir/regions.bson", force=true)
+        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, "", experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
+        cp("$results_dir/switched-system/regions.bson", "$results_dir/regions.bson", force=true)
         system_paths = new_imdp_dirs
-        push!(refinement_result_dirs, synth_dir) 
+        push!(refinement_result_dirs, results_dir) 
     end
 
     return refinement_result_dirs
