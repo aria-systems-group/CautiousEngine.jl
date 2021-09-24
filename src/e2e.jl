@@ -68,20 +68,23 @@ Performs k-step refinement over uncertain states according to minimum spec satis
 """
 function spec_based_refinement(experiment_params_array, system_paths::Array{String,1}, results_path::String, 
                                system_tag::String, label_fcn, refinement_steps::Int; 
-                               minimum_threshold=0.80, horizon=-1, reuse_regions_flag=false, reuse_transition_mats_flag=false)
+                               minimum_threshold=0.80, horizon=-1, reuse_regions_flag=false, reuse_transition_mats_flag=false,
+                               ltl_formula=nothing)
 
     
     refinement_result_dirs = []
     synth_dir = "$results_path/$system_tag/reach-specification"
     !isdir(synth_dir) && mkpath(synth_dir)
 
-    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, synth_dir, "", experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
+    res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(system_paths, synth_dir, "", experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon, ltl_formula=ltl_formula)
 
     save_legacy_mats(res_mat, synth_dir, horizon)
 
     for i=1:refinement_steps
         results_dir = "$synth_dir/refinement$i"
-        states_to_update = unique(Int.(pimdp_col_to_imdp_state.(findall(x->x<minimum_threshold, res_mat[1:end-1,3]) ∩ findall(x->x>minimum_threshold, res_mat[1:end-1,4]), 2))) # ! TODO: FIX THIS
+
+        num_dfa_states = Int(length(pimdp.states)/(length(keys(pimdp.imdp_label_dict))))
+        states_to_update = unique(Int.(pimdp_col_to_imdp_state.(findall(x->x<minimum_threshold, res_mat[1:end-1,3]) ∩ findall(x->x>minimum_threshold, res_mat[1:end-1,4]), num_dfa_states))) 
 
         new_imdp_dirs = Array{String,1}()
         # For each IMDP in the system
@@ -91,7 +94,7 @@ function spec_based_refinement(experiment_params_array, system_paths::Array{Stri
             push!(new_imdp_dirs, imdp_results_dir)
         end
        
-        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, "", experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon)
+        res_mat, res_dir, pimdp = perform_synthesis_from_result_dirs(new_imdp_dirs, results_dir, "", experiment_params_array[1].specification_file, label_fcn; add_opt=true, horizon=horizon, ltl_formula=ltl_formula)
         cp("$results_dir/switched-system/regions.bson", "$results_dir/regions.bson", force=true)
         system_paths = new_imdp_dirs
         push!(refinement_result_dirs, results_dir) 
@@ -269,14 +272,13 @@ function perform_synthesis_from_result_dirs_safety(res_dirs, exp_dir, system_tag
 	# end
 	save_legacy_mats(res_mat, dst_dir, horizon)
 
-	# plot_results_from_file(dst_dir)
 	# plot_synthesis_results(dst_dir, res_mat, imdp, dfa, pimdp)
     return res_mat, dst_dir, -1 
 end
 
 function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_file, label_fcn; 
 	plot_graphs=false, rerun_flag=false, modes=nothing, add_opt=false,
-	region_specific="", num_sims=10, sim_points=nothing, horizon=-1)
+	region_specific="", num_sims=10, sim_points=nothing, horizon=-1, ltl_formula=nothing)
 
 	@info "Creating the IMDP..."
 	imdp = create_imdp_from_result_dirs(res_dirs, "$exp_dir/$system_tag")    
@@ -285,9 +287,15 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
 	plot_graphs ? create_dot_graph(imdp, "$exp_dir/$system_tag/imdp.gv") : nothing
 
 	@info "Creating the DFA..."
-	spec_tag = basename(spec_file)[1:end-3]
-	include("$spec_file")
-	dfa = DFA(dfa_states, dfa_props, dfa_transitions, dfa_accepting_state, dfa_sink_state, dfa_initial_state)
+    if !isnothing(ltl_formula)
+        @info "Constructing dfa from ltl formula: $ltl_formula"
+        dfa = construct_DFA_from_LTL(ltl_formula)
+        spec_tag = string(ltl_formula)
+    else
+        include("$spec_file") 
+        spec_tag = basename(spec_file)[1:end-3]
+        dfa = DFA(dfa_states, dfa_props, dfa_transitions, dfa_accepting_state, dfa_sink_state, dfa_initial_state)
+    end
 	dst_dir = "$exp_dir/$system_tag/$spec_tag"
 	isdir(dst_dir) ? nothing : mkpath(dst_dir)
 	plot_graphs ? create_dot_graph(dfa, "$dst_dir/specification.gv") : nothing
@@ -303,13 +311,8 @@ function perform_synthesis_from_result_dirs(res_dirs, exp_dir, system_tag, spec_
 	sys_dir = res_dirs[1]
 	cp("$sys_dir/regions.bson", "$dst_dir/regions.bson", force=true)
 
-	# TODO Plot gamma values somewhere else, i.e. not here
-	# if add_opt
-	#     plot_gamma_value(dst_dir, res_mat, res_mat_opt, num_dfa_states=length(dfa.states))
-	# end
 	save_legacy_mats(res_mat, dst_dir, horizon)
 
-	# plot_results_from_file(dst_dir)
 	plot_synthesis_results(dst_dir, res_mat, imdp, dfa, pimdp)
 
 	if !isnothing(modes)

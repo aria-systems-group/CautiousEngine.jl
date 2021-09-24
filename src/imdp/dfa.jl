@@ -16,7 +16,9 @@ function δ(transitions, q, label)
             return relation[3]
         end
     end
-    return -1
+
+    # TODO: If no transitions, stay in the current state - this is a workaround to use Spot.jl
+    return q
 end 
 
 """
@@ -123,4 +125,52 @@ function possible_accept_transition(dfa, dfa_state, symbol)
         end
     end
     return false
+end
+
+""" 
+Construct DFA object using Spot
+"""
+function construct_DFA_from_LTL(ltl_form)
+    # ltl_form = ltl"$ltl_string"
+    translator = LTLTranslator(deterministic=true)
+    spot_automaton = Spot.translate(translator, ltl_form)
+
+    transitions = []
+    for (edge, label) in zip(get_edges(spot_automaton), get_labels(spot_automaton))
+        label = string(label) == "1" ? "true" :  create_full_label(atomic_propositions(spot_automaton), label)
+        new_transition = (edge[1], label, edge[2])
+        push!(transitions, new_transition)
+    end
+
+    # TODO: add transition to the/a violating state
+    # ! It doesn't exist here currently
+    accept_states = get_rabin_acceptance(spot_automaton)
+    accept_state = collect(accept_states[1][2])[1]
+
+    dfa = DFA(collect(1:num_states(spot_automaton)), string.(atomic_propositions(spot_automaton)), transitions, accept_state, nothing, get_init_state_number(spot_automaton))
+
+    return dfa
+end
+
+function create_full_label(props, label)
+    # all props
+    label_props = atomic_prop_collect(label)
+    if props == label_props
+        return string(label)
+    end
+
+    # rebuild
+    label = string(label)
+    new_label = ""
+    for prop in string.(props)
+        if occursin("!$prop", label)
+            new_label = "$new_label & !$prop"
+        elseif occursin("$prop", label)
+            new_label = "$new_label & $prop"
+        else
+            new_label = "$new_label & !$prop"
+        end
+    end
+    new_label = new_label[4:end]
+    return new_label
 end

@@ -1,145 +1,7 @@
 """
-Plot the results from file using the legacy format.
+Plot the results for a 2d solution.
 """
-function plot_results_from_file(results_path; num_dfa_states=1, plot_gp=false, min_threshold=0.95, trajectories=nothing, filename=nothing, plot_gamma=false, extents_dict=nothing, filepath=nothing)
-    extents, post_extents = deserialize_region_data("$results_path/regions.bson")
-    num_regions = extents.count - 1
-    X = extents[extents.count]
-    minx = minimum(X["x1"])
-    maxx = maximum(X["x1"])
-    miny = minimum(X["x2"])
-    maxy = maximum(X["x2"])
-
-    mat_files = filter(x -> occursin(r"globally-safe-.*.mat", x), readdir(results_path))
-
-    if plot_gp
-        files = readdir("$results_path/gps")
-        gp_file = filter(x->occursin(".bin", x), files)[1]
-        f = open("$results_path/gps/$gp_file")
-        gp_set = deserialize(f)
-        gp_x1 = gp_set["x1"]
-        close(f)
-    end
-
-    for mat_file in mat_files
-
-        res = matread("$results_path/$mat_file")
-        k = occursin("--1", mat_file) ? -1 : parse(Int, split(mat_file, "-")[3])
-        base_str = mat_file[1:end-4]
-        # Plot the maximum results
-        # Probabilities for each cell from 0 to 1 corresponding to regions 1 to N
-        # TODO: Need to somehow generalize this skipping step
-        maxPrs = res["indVmax"][1:num_dfa_states:end]
-        minPrs = res["indVmin"][1:num_dfa_states:end]
-        min_minPr = minimum(minPrs)
-        min_maxPr = minimum(maxPrs)
-
-        function plot_cell(extent, prob_value, norm_val)
-            x = [extent["x1"][1], extent["x1"][1], extent["x1"][2], extent["x1"][2]]
-            y = [extent["x2"][1], extent["x2"][2], extent["x2"][2], extent["x2"][1]]
-            shape = Plots.Shape(x, y)
-            plot!(shape, color=:black, fillalpha=1-prob_value, linealpha=0.0, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
-        end
-
-        plt_max = plot(#title="$k Step Maximum Safety",
-                       aspect_ratio=1,
-                       size=(300,300), dpi=300,
-                       xlims=[minx, maxx], ylims=[miny, maxy],
-                       #xlabel="X Units", ylabel="Y Units",
-                       xtickfont=font(10),
-                       ytickfont=font(10),
-                       titlefont=font(10),
-                       grid=false)
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-        [plot_cell(extents[i], maxPrs[i], min_maxPr) for i in 1:num_regions]
-        savefig(plt_max, "$results_path/$base_str-max-heatmap.png")
-        # Plot the minimum results
-        plt_min = plot(#title=L"$k Step Minimum Safety",
-                       aspect_ratio=1,
-                       size=(300,300), dpi=300,
-                       xlims=[minx, maxx], ylims=[miny, maxy],
-                       #xlabel="X Units", ylabel="Y Units",
-                       xtickfont=font(10),
-                       ytickfont=font(10),
-                       titlefont=font(10),
-                       grid=false,
-                       backgroundcolor=128)
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-        [plot_cell(extents[i], minPrs[i], min_minPr) for i in 1:num_regions]
-        savefig(plt_min, "$results_path/$base_str-min-heatmap.png")
-
-        plt_min = plot(#title=L"$k Step Minimum Safety",
-                       aspect_ratio=1,
-                       size=(300,300), dpi=300,
-                       xlims=[minx, maxx], ylims=[miny, maxy],
-                       #xlabel="X Units", ylabel="Y Units",
-                       xtickfont=font(10),
-                       ytickfont=font(10),
-                       titlefont=font(10),
-                       grid=false,
-                       backgroundcolor=128)
-
-        function plot_cell_verify(extent, min_prob_value, max_prob_value, threshold)
-            x = [extent["x1"][1], extent["x1"][1], extent["x1"][2], extent["x1"][2]]
-            y = [extent["x2"][1], extent["x2"][2], extent["x2"][2], extent["x2"][1]]
-            shape = Plots.Shape(x, y)
-
-            if min_prob_value >= threshold
-                plot!(shape, color=:purple, fillalpha=0.10, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
-            elseif max_prob_value < threshold
-                plot!(shape, color=:purple, fillalpha=0.99, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
-            else
-                plot!(shape, color=:purple, fillalpha=0.50, linealpha=0.05, foreground_color_border=:white, foreground_color_axis=:white, xticks = [minx, 0, maxx], yticks = [miny, 0, maxy], label="")
-            end
-        end
-        # Plot the cells
-        plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-        [plot_cell_verify(extents[i], minPrs[i], maxPrs[i], min_threshold) for i in 1:num_regions]
-        savefig(plt_min, "$results_path/$base_str-verification.png")
-        if !isnothing(filepath)
-            savefig(plt_min, "$filepath-verification.png")
-        end
-
-        if !isnothing(trajectories)
-            for trajectory in trajectories
-                if length(trajectory) > 1
-                    [plot!([trajectory[i][1], trajectory[i+1][1]], [trajectory[i][2], trajectory[i+1][2]], color=:black, label="", linewith=2) for i=1:length(trajectory)-1]
-                    scatter!([trajectory[end][1]], [trajectory[end][2]], color=:black, markershape=:star5, label="")
-                end
-            end
-
-            if !isnothing(extents_dict)
-                for key in keys(extents_dict)
-                    for extent in extents_dict[key]
-                        shape = extent_dict_to_shape(extent)
-                        @info shape
-                        plot!(shape, label="", color=:black, fillalpha=0.0)
-                    end
-                end
-            end
-            savefig(plt_min, "$results_path/$filename")
-            if !isnothing(filepath)
-                savefig(plt_min, "$filepath-sim.png")
-            end
-        end
-
-        if plot_gamma
-            plot!(Plots.Shape([minx, minx, maxx, maxx], [miny, maxy, maxy, miny]), fillalpha=0, linecolor=:black, linewidth=2, label="")
-            [plot_cell(extents[i], abs(minPrs[i]-maxPrs[i]), nothing) for i in 1:num_regions]
-            savefig(plt_min, "$results_path/$base_str-gamma-values.png")
-        end
-        
-        if plot_gp
-            # Plot where the data was collected and a convex hull
-            data_shape = VPolygon(convex_hull([gp_x1.x[:, i] for i=1:gp_x1.nobs]))
-            plot!(data_shape, fillalpha=0.25)
-            [scatter!([gp_x1.x[1, i]], [gp_x1.x[2,i]], label="", color=:black) for i=1:gp_x1.nobs]
-            savefig(plt_min, "$results_path/$base_str-data-hull.pdf")
-        end
-    end
-end
-
-function plot_2d_verification_results(results_path;num_dfa_states=1, min_threshold=0.95, extents_dict=Dict(), extents_labels_colors=Dict(), prob_plots=false, lazy_flag=false, plot_tag="", state_outlines_flag=false)
+function plot_2d_verification_results(results_path; num_dfa_states=1, min_threshold=0.95, extents_dict=Dict(), extents_labels_colors=Dict(), prob_plots=false, lazy_flag=false, plot_tag="", state_outlines_flag=false, trajectories=nothing, dfa_init_state=1)
     extents, _ = deserialize_region_data("$results_path/regions.bson", lazy_flag=lazy_flag)
     num_regions = extents.count - 1 
     X = extents[extents.count]
@@ -153,10 +15,8 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
     for mat_file in mat_files
         res = matread("$results_path/$mat_file")
         base_str = mat_file[1:end-4]
-
-        # TODO: Need to somehow generalize this skipping step
-        maxPrs = res["indVmax"][1:num_dfa_states:end]
-        minPrs = res["indVmin"][1:num_dfa_states:end]
+        maxPrs = res["indVmax"][dfa_init_state:num_dfa_states:end]
+        minPrs = res["indVmin"][dfa_init_state:num_dfa_states:end]
 
         if prob_plots
             # Plot the maximumprobabilities 
@@ -213,6 +73,14 @@ function plot_2d_verification_results(results_path;num_dfa_states=1, min_thresho
         end
 
         savefig(plt_verification, "$results_path/$base_str$plot_tag-verification.png")
+
+        if !isnothing(trajectories)
+            for trajectory in trajectories
+                [plot!([trajectory[i][1], trajectory[i+1][1]], [trajectory[i][2], trajectory[i+1][2]], color=:black, label="", linewith=2) for i=1:length(trajectory)-1]
+                scatter!([trajectory[end][1]], [trajectory[end][2]], color=:black, markershape=:star5, label="")
+            end
+            savefig(plt_verification, "$results_path/$base_str$plot_tag-simulations.png")
+        end
     end
 end
 
@@ -426,7 +294,7 @@ function plot_synthesis_results(results_path, res_mat, imdp, dfa, pimdp; plot_gp
     X = extents[extents.count]
 
     if X.count == 2
-        plot_results_from_file(results_path, num_dfa_states=length(dfa.states), trajectories=trajectories, filename=filename)
+        plot_2d_verification_results(results_path, num_dfa_states=length(dfa.states), trajectories=trajectories)
         return
     end
 

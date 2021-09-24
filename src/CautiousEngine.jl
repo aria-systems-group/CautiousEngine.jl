@@ -20,6 +20,7 @@ using Printf
 using IntervalSets
 using SparseArrays
 using Plots
+using Spot
 
 # Lazy sets, the hot new way to work with polytopes
 using LazySets
@@ -69,9 +70,6 @@ export perform_synthesis_from_result_dirs,
        generate_linear_truth, 
        verify_experiment, 
        generate_result_dir_name
-
-export plot_results_from_file, 
-       plot_gp_field_slice
 
 ## TODO: Where tf to put this
 """

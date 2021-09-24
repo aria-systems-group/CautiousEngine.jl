@@ -84,7 +84,9 @@ function construct_DFA_IMDP_product(dfa, imdp)
     end
    
     labels = zeros(1, M*sizeQ)
-    labels[dfa_acc_state:sizeQ:M*sizeQ] .= 1
+    if !isnothing(dfa_acc_state)
+        labels[dfa_acc_state:sizeQ:M*sizeQ] .= 1
+    end
 
     sink_labels = zeros(1, M*sizeQ)
     if !isnothing(dfa_sink_state)
