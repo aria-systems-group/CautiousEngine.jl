@@ -89,7 +89,7 @@ function propogate_pimdp_trajectory(pimdp, dfa, extent_dict, x_new)
 
     if isnothing(new_extent)
         qnew = dfa.sink_state
-        new_extent = region_dict.count
+        new_extent = extent_dict.count
     else
         qnew = δ(dfa.transitions, pimdp.state_history[end][2], pimdp.imdp_label_dict[new_extent])
     end
