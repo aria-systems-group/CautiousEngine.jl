@@ -1,6 +1,7 @@
 using Distributions
 using Random
 using IntervalSets
+using SparseArrays
 
 using CautiousEngine
 
