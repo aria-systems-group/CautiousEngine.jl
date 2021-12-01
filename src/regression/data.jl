@@ -1,6 +1,8 @@
 # Contains functions for generating synthetic training data
 
 """
+    generate_training_data(unknown_fn)
+
 Generates synthetic data from an unknown function by uniformly sampling datapoints over the domain. Returns the input and output points. 
 
     Note that you cannot use the `measurement_dist` and `known_fn` together.

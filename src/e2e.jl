@@ -5,6 +5,8 @@
 ==#
 
 """
+    safety_based_refinement
+
 Performs k-step refinement over uncertain states according to safety verification.
 """
 function safety_based_refinement(experiment_params::ExperimentParameters, results_path::String, verification_mat, refinement_steps::Int; 
@@ -26,6 +28,11 @@ function safety_based_refinement(experiment_params::ExperimentParameters, result
     return refinement_result_dirs
 end
 
+"""
+    safety_based_synthesis
+
+Performs synthesis on a system with a focus on remaining in a safe set.
+"""
 function safety_based_synthesis(experiment_params_array, system_paths::Array{String,1}, results_path::String, 
     system_tag::String, label_fcn, refinement_steps::Int; 
     minimum_threshold=0.80, horizon=-1, reuse_regions_flag=false, reuse_transition_mats_flag=false) 
