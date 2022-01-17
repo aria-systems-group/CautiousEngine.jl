@@ -23,7 +23,7 @@ Since this package is not public yet, simply clone and add the repository to the
 
 `push!(LOAD_PATH, "path/to/CautiousEngine.jl")`. 
 
-A good location for packages under development is `~/.julia/dev`.
+If `~/.julia/config/startup.jl` does not exist, you can create it. A good location for packages under development is `~/.julia/dev`.
 
 Next, use the following commands to activate the project environment and then instantiate the project and install dependencies: 
 
