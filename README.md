@@ -2,7 +2,22 @@
 This package contains end-to-end tools for the verification and synthesis of data driven systems using Gaussian process regression and IMDP abstraction. 
 
 ## Installation
-Installation has only been tested for Julia 1.5.x. Instantiation fails for Julia 1.6+, likely due to old dependencies. 
+Must be installed using Julia 1.6+. Installation will fail for versions 1.5 and below. **Build tools must be installed for certain packages to work.** This limitation will be addressed soon. In the meantime, you can install essential build tools in Ubuntu via `apt-get install build-essential`.
+
+### Easy Way
+From the Julia REPL,
+
+1. Press `]` to activate the Pkg prompt
+2. Add the package, `add https://github.com/aria-systems-group/CautiousEngine.jl.git`
+3. Activate the package environment, `activate ~/.julia/packages/CautiousEngine/<some-random-chars>`
+4. Instantiate the environment, `instantiate`
+
+Check if everything worked by pressing backspace to go back to the `julia>` prompt, and try `using CautiousEngine`. If this succeeds without error, try running an example:
+
+`include("~/.julia/packages/CautiousEngine/<some-random-chars>/examples/verification-example-single.jl")`
+
+### Less Easy Way
+
 
 Since this package is not public yet, simply clone and add the repository to the Julia load path (or add it to `startup.jl`) via:
 
