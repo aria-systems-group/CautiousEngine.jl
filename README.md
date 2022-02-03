@@ -8,8 +8,8 @@ Must be installed using Julia 1.6+. Installation will fail for versions 1.5 and 
 From the Julia REPL,
 
 1. Press `]` to activate the Pkg prompt
-2. Add the package, `add https://github.com/aria-systems-group/CautiousEngine.jl.git`
-3. Activate the package environment, `activate ~/.julia/packages/CautiousEngine/<some-random-chars>`
+2. Add the package in development mode, `dev https://github.com/aria-systems-group/CautiousEngine.jl.git`
+3. Activate the package environment, `activate ~/.julia/dev/CautiousEngine`
 4. Instantiate the environment, `instantiate`
 
 Check if everything worked by pressing backspace to go back to the `julia>` prompt, and try `using CautiousEngine`. If this succeeds without error, try running an example:
@@ -17,7 +17,6 @@ Check if everything worked by pressing backspace to go back to the `julia>` prom
 `include("~/.julia/packages/CautiousEngine/<some-random-chars>/examples/verification-example-single.jl")`
 
 ### Less Easy Way
-
 
 Since this package is not public yet, simply clone and add the repository to the Julia load path (or add it to `startup.jl`) via:
 
