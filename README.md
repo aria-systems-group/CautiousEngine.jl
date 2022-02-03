@@ -14,7 +14,7 @@ From the Julia REPL,
 
 Check if everything worked by pressing backspace to go back to the `julia>` prompt, and try `using CautiousEngine`. If this succeeds without error, try running an example:
 
-`include("~/.julia/packages/CautiousEngine/<some-random-chars>/examples/verification-example-single.jl")`
+`include("~/.julia/dev/CautiousEngine/examples/verification-example-single.jl")`
 
 ### Less Easy Way
 
